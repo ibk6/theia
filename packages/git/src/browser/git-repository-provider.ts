@@ -95,7 +95,7 @@ export class GitRepositoryProvider {
      */
     set selectedRepository(repository: Repository | undefined) {
         if (!repository) {
-            this.scmService.selectedRepository = repository;
+            this.scmService.selectedRepository = undefined;
         }
         this._selectedRepository = repository;
         this.storageService.setData<Repository | undefined>(this.selectedRepoStorageKey, repository);
