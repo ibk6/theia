@@ -798,7 +798,7 @@ export class GitContribution implements
             const scmProvider = this.scmProviders.find(provider => provider.rootUri === repositoryUri);
             if (scmProvider) {
                 (scmProvider as ScmProviderImpl).fireChangeStatusBarCommands([{
-                    id: 'vcs-sync-status',
+                    id: GitContribution.GIT_SYNC_STATUS,
                     text: entry.text,
                     tooltip: entry.tooltip,
                     command: entry.command,
