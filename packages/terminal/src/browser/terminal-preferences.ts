@@ -39,6 +39,7 @@ export const TerminalConfigSchema: PreferenceSchema = {
         'terminal.integrated.fontSize': {
             type: 'number',
             description: 'Controls the font size in pixels of the terminal.',
+            minimum: 6,
             default: EDITOR_FONT_DEFAULTS.fontSize
         },
         'terminal.integrated.fontWeight': {
@@ -61,6 +62,7 @@ export const TerminalConfigSchema: PreferenceSchema = {
         'terminal.integrated.lineHeight': {
             description: 'Controls the line height of the terminal, this number is multiplied by the terminal font size to get the actual line-height in pixels.',
             type: 'number',
+            minimum: 1,
             default: 1
         },
     }
@@ -71,13 +73,13 @@ export interface TerminalConfiguration {
     'terminal.enablePaste': boolean
     'terminal.integrated.fontFamily': string
     'terminal.integrated.fontSize': number
-    'terminal.integrated.fontWeight': FontWeigth
-    'terminal.integrated.fontWeightBold': FontWeigth
+    'terminal.integrated.fontWeight': FontWeight
+    'terminal.integrated.fontWeightBold': FontWeight
     'terminal.integrated.letterSpacing': number
     'terminal.integrated.lineHeight': number
 }
 
-type FontWeigth = 'normal' | 'bold' | '100' | '200' | '300' | '400' | '500' | '600' | '700' | '800' | '900';
+type FontWeight = 'normal' | 'bold' | '100' | '200' | '300' | '400' | '500' | '600' | '700' | '800' | '900';
 
 export const TerminalPreferences = Symbol('TerminalPreferences');
 export type TerminalPreferences = PreferenceProxy<TerminalConfiguration>;

@@ -20,12 +20,11 @@ import { Message } from '@phosphor/messaging';
 import { PanelLayout, SplitPanel } from '@phosphor/widgets';
 import URI from '@theia/core/lib/common/uri';
 import { ILogger } from '@theia/core/lib/common/logger';
-import { Key, KeyCode } from '@theia/core/lib/browser/keys';
 import { Emitter, Event } from '@theia/core/lib/common/event';
 import { FileSystem } from '@theia/filesystem/lib/common/filesystem';
 import { KeybindingRegistry } from '@theia/core/lib/browser/keybinding';
 import { WindowService } from '@theia/core/lib/browser/window/window-service';
-import { FrontendApplicationContribution, ApplicationShell, parseCssTime } from '@theia/core/lib/browser';
+import { FrontendApplicationContribution, ApplicationShell, parseCssTime, Key, KeyCode } from '@theia/core/lib/browser';
 import { FileSystemWatcher, FileChangeEvent } from '@theia/filesystem/lib/browser/filesystem-watcher';
 import { DisposableCollection, Disposable } from '@theia/core/lib/common/disposable';
 import { BaseWidget, addEventListener, FocusTracker, Widget } from '@theia/core/lib/browser/widgets/widget';
@@ -452,7 +451,7 @@ export class MiniBrowserContent extends BaseWidget {
         clearTimeout(this.frameLoadTimeout);
         this.maybeResetBackground();
         this.hideLoadIndicator();
-        this.showErrorBar('Loading this page is taking longer than usual');
+        this.showErrorBar('Still loading...');
     }
 
     protected showLoadIndicator(): void {
@@ -658,7 +657,7 @@ export class MiniBrowserContent extends BaseWidget {
                     this.input.title = `Open ${url} In A New Window`;
                 }
                 clearTimeout(this.frameLoadTimeout);
-                this.frameLoadTimeout = window.setTimeout(this.onFrameTimeout.bind(this), 3000);
+                this.frameLoadTimeout = window.setTimeout(this.onFrameTimeout.bind(this), 4000);
                 if (showLoadIndicator) {
                     this.showLoadIndicator();
                 }

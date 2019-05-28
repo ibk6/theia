@@ -14,7 +14,7 @@
  * SPDX-License-Identifier: EPL-2.0 OR GPL-2.0 WITH Classpath-exception-2.0
  ********************************************************************************/
 
- // tslint:disable:no-any
+// tslint:disable:no-any
 
 import * as path from 'path';
 import * as fs from 'fs-extra';
@@ -53,11 +53,11 @@ export class HostedPluginReader implements BackendApplicationContribution {
     configure(app: express.Application): void {
         app.get('/hostedPlugin/:pluginId/:path(*)', (req, res) => {
             const pluginId = req.params.pluginId;
-            const filePath: string = req.params.path;
+            const filePath = decodeURIComponent(req.params.path);
 
-            const localPath: string | undefined = this.pluginsIdsFiles.get(pluginId);
+            const localPath = this.pluginsIdsFiles.get(pluginId);
             if (localPath) {
-                const fileToServe = localPath + filePath;
+                const fileToServe = path.join(localPath, filePath);
                 res.sendFile(fileToServe);
             } else {
                 res.status(404).send("The plugin with id '" + pluginId + "' does not exist.");

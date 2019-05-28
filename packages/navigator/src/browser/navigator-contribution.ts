@@ -21,7 +21,7 @@ import {
     OpenerService, FrontendApplicationContribution, FrontendApplication, CompositeTreeNode
 } from '@theia/core/lib/browser';
 import { FileDownloadCommands } from '@theia/filesystem/lib/browser/download/file-download-command-contribution';
-import { CommandRegistry, MenuModelRegistry, MenuPath, isOSX, Command } from '@theia/core/lib/common';
+import { CommandRegistry, MenuModelRegistry, MenuPath, isOSX, Command, DisposableCollection } from '@theia/core/lib/common';
 import { SHELL_TABBAR_CONTEXT_MENU } from '@theia/core/lib/browser';
 import { WorkspaceCommands, WorkspaceService, WorkspacePreferences } from '@theia/workspace/lib/browser';
 import { FILE_NAVIGATOR_ID, FileNavigatorWidget } from './navigator-widget';
@@ -31,11 +31,12 @@ import { FileNavigatorFilter } from './navigator-filter';
 import { WorkspaceNode } from './navigator-tree';
 import { NavigatorContextKeyService } from './navigator-context-key-service';
 import { TabBarToolbarContribution, TabBarToolbarRegistry } from '@theia/core/lib/browser/shell/tab-bar-toolbar';
+import { FileSystemCommands } from '@theia/filesystem/lib/browser/filesystem-frontend-contribution';
 
 export namespace FileNavigatorCommands {
     export const REVEAL_IN_NAVIGATOR: Command = {
         id: 'navigator.reveal',
-        label: 'Reveal in Files'
+        label: 'Reveal in Explorer'
     };
     export const TOGGLE_HIDDEN_FILES: Command = {
         id: 'navigator.toggle.hidden.files',
@@ -43,6 +44,8 @@ export namespace FileNavigatorCommands {
     };
     export const COLLAPSE_ALL: Command = {
         id: 'navigator.collapse.all',
+        category: 'File',
+        label: 'Collapse Folders in Explorer',
         iconClass: 'collapse-all'
     };
 }
@@ -84,6 +87,9 @@ export class FileNavigatorContribution extends AbstractViewContribution<FileNavi
     @inject(NavigatorContextKeyService)
     protected readonly contextKeyService: NavigatorContextKeyService;
 
+    @inject(MenuModelRegistry)
+    protected readonly menuRegistry: MenuModelRegistry;
+
     constructor(
         @inject(FileNavigatorPreferences) protected readonly fileNavigatorPreferences: FileNavigatorPreferences,
         @inject(OpenerService) protected readonly openerService: OpenerService,
@@ -115,6 +121,12 @@ export class FileNavigatorContribution extends AbstractViewContribution<FileNavi
         };
         updateFocusContextKeys();
         this.shell.activeChanged.connect(updateFocusContextKeys);
+        this.updateAddRemoveFolderActions(this.menuRegistry);
+        this.workspacePreferences.onPreferenceChanged(change => {
+            if (change.preferenceName === 'workspace.supportMultiRootWorkspace') {
+                this.updateAddRemoveFolderActions(this.menuRegistry);
+            }
+        });
     }
 
     async initializeLayout(app: FrontendApplication): Promise<void> {
@@ -138,7 +150,7 @@ export class FileNavigatorContribution extends AbstractViewContribution<FileNavi
         registry.registerCommand(FileNavigatorCommands.COLLAPSE_ALL, {
             execute: widget => this.withWidget(widget, () => this.collapseFileNavigatorTree()),
             isEnabled: widget => this.withWidget(widget, () => this.workspaceService.opened),
-            isVisible: wodget => this.withWidget(wodget, () => this.workspaceService.opened)
+            isVisible: widget => this.withWidget(widget, () => this.workspaceService.opened)
         });
     }
 
@@ -153,7 +165,7 @@ export class FileNavigatorContribution extends AbstractViewContribution<FileNavi
         super.registerMenus(registry);
         registry.registerMenuAction(SHELL_TABBAR_CONTEXT_MENU, {
             commandId: FileNavigatorCommands.REVEAL_IN_NAVIGATOR.id,
-            label: 'Reveal in Files',
+            label: FileNavigatorCommands.REVEAL_IN_NAVIGATOR.label,
             order: '5'
         });
 
@@ -192,10 +204,15 @@ export class FileNavigatorContribution extends AbstractViewContribution<FileNavi
         registry.registerMenuAction(NavigatorContextMenu.MODIFICATION, {
             commandId: WorkspaceCommands.FILE_DUPLICATE.id
         });
-        registry.registerMenuAction(NavigatorContextMenu.MODIFICATION, {
+
+        const downloadUploadMenu = [...NAVIGATOR_CONTEXT_MENU, '6_downloadupload'];
+        registry.registerMenuAction(downloadUploadMenu, {
+            commandId: FileSystemCommands.UPLOAD.id,
+            order: 'a'
+        });
+        registry.registerMenuAction(downloadUploadMenu, {
             commandId: FileDownloadCommands.DOWNLOAD.id,
-            label: 'Download',
-            order: 'z1' // Should be the last item in the "move" menu group.
+            order: 'b'
         });
 
         registry.registerMenuAction(NavigatorContextMenu.NAVIGATION, {
@@ -211,21 +228,6 @@ export class FileNavigatorContribution extends AbstractViewContribution<FileNavi
             commandId: FileNavigatorCommands.COLLAPSE_ALL.id,
             label: 'Collapse All',
             order: 'z2'
-        });
-
-        this.workspacePreferences.ready.then(() => {
-            if (this.workspacePreferences['workspace.supportMultiRootWorkspace']) {
-                this.registerAddRemoveFolderActions(registry);
-            }
-            this.workspacePreferences.onPreferenceChanged(change => {
-                if (change.preferenceName === 'workspace.supportMultiRootWorkspace') {
-                    if (change.newValue) {
-                        this.registerAddRemoveFolderActions(registry);
-                    } else {
-                        this.unregisterAddRemoveFolderActions(registry);
-                    }
-                }
-            });
         });
     }
 
@@ -315,21 +317,21 @@ export class FileNavigatorContribution extends AbstractViewContribution<FileNavi
         // select first visible node
         const firstChild = WorkspaceNode.is(root) ? root.children[0] : root;
         if (SelectableTreeNode.is(firstChild)) {
-            await model.selectNode(firstChild);
+            model.selectNode(firstChild);
         }
     }
 
-    private registerAddRemoveFolderActions(registry: MenuModelRegistry): void {
-        registry.registerMenuAction(NavigatorContextMenu.WORKSPACE, {
-            commandId: WorkspaceCommands.ADD_FOLDER.id
-        });
-        registry.registerMenuAction(NavigatorContextMenu.WORKSPACE, {
-            commandId: WorkspaceCommands.REMOVE_FOLDER.id
-        });
+    private readonly toDisposeAddRemoveFolderActions = new DisposableCollection();
+    private updateAddRemoveFolderActions(registry: MenuModelRegistry): void {
+        this.toDisposeAddRemoveFolderActions.dispose();
+        if (this.workspacePreferences['workspace.supportMultiRootWorkspace']) {
+            this.toDisposeAddRemoveFolderActions.push(registry.registerMenuAction(NavigatorContextMenu.WORKSPACE, {
+                commandId: WorkspaceCommands.ADD_FOLDER.id
+            }));
+            this.toDisposeAddRemoveFolderActions.push(registry.registerMenuAction(NavigatorContextMenu.WORKSPACE, {
+                commandId: WorkspaceCommands.REMOVE_FOLDER.id
+            }));
+        }
     }
 
-    private unregisterAddRemoveFolderActions(registry: MenuModelRegistry): void {
-        registry.unregisterMenuAction({ commandId: WorkspaceCommands.ADD_FOLDER.id }, NavigatorContextMenu.WORKSPACE);
-        registry.unregisterMenuAction({ commandId: WorkspaceCommands.REMOVE_FOLDER.id }, NavigatorContextMenu.WORKSPACE);
-    }
 }

@@ -16,8 +16,8 @@
 
 import { injectable, inject, postConstruct } from 'inversify';
 import { Message } from '@phosphor/messaging';
-import { Disposable, MenuPath } from '../../common';
-import { Key, KeyCode, KeyModifier } from '../keys';
+import { Disposable, MenuPath, SelectionService } from '../../common';
+import { Key, KeyCode, KeyModifier } from '../keyboard/keys';
 import { ContextMenuRenderer } from '../context-menu-renderer';
 import { StatefulWidget } from '../shell';
 import { EXPANSION_TOGGLE_CLASS, SELECTED_CLASS, COLLAPSED_CLASS, FOCUS_CLASS, Widget } from '../widgets';
@@ -35,6 +35,7 @@ import { TopDownTreeIterator } from './tree-iterator';
 import { SearchBox, SearchBoxFactory, SearchBoxProps } from './search-box';
 import { TreeSearch } from './tree-search';
 import { ElementExt } from '@phosphor/domutils';
+import { TreeWidgetSelection } from './tree-widget-selection';
 
 const debounce = require('lodash.debounce');
 
@@ -83,6 +84,11 @@ export interface TreeProps {
      * 'true' if the selected node should be auto scrolled only if the widget is active. Otherwise, `false`. Defaults to `false`.
      */
     readonly scrollIfActive?: boolean
+
+    /**
+     * `true` if a tree widget contributes to the global selection. Defaults to `false`.
+     */
+    readonly globalSelection?: boolean;
 }
 
 export interface NodeProps {
@@ -125,6 +131,11 @@ export class TreeWidget extends ReactWidget implements StatefulWidget {
     protected readonly searchBoxFactory: SearchBoxFactory;
 
     protected decorations: Map<string, TreeDecoration.Data[]> = new Map();
+
+    @inject(SelectionService)
+    protected readonly selectionService: SelectionService;
+
+    protected shouldScrollToRow = true;
 
     constructor(
         @inject(TreeProps) readonly props: TreeProps,
@@ -179,6 +190,25 @@ export class TreeWidget extends ReactWidget implements StatefulWidget {
             this.updateRows();
             this.updateDecorations();
         });
+        if (this.props.globalSelection) {
+            this.toDispose.pushAll([
+                this.model.onSelectionChanged(() => {
+                    if (this.node.contains(document.activeElement)) {
+                        this.updateGlobalSelection();
+                    }
+                }),
+                Disposable.create(() => {
+                    const selection = this.selectionService.selection;
+                    if (TreeWidgetSelection.isSource(selection, this)) {
+                        this.selectionService.selection = undefined;
+                    }
+                })
+            ]);
+        }
+    }
+
+    protected updateGlobalSelection(): void {
+        this.selectionService.selection = TreeWidgetSelection.create(this);
     }
 
     protected rows = new Map<string, TreeWidget.NodeRow>();
@@ -213,11 +243,18 @@ export class TreeWidget extends ReactWidget implements StatefulWidget {
 
     protected scrollToRow: number | undefined;
     protected updateScrollToRow(updateOptions?: TreeWidget.ForceUpdateOptions): void {
+        this.scrollToRow = this.getScrollToRow();
+        this.forceUpdate(updateOptions);
+    }
+
+    protected getScrollToRow(): number | undefined {
+        if (!this.shouldScrollToRow) {
+            return undefined;
+        }
         const selected = this.model.selectedNodes;
         const node: TreeNode | undefined = selected.find(SelectableTreeNode.hasFocus) || selected[0];
         const row = node && this.rows.get(node.id);
-        this.scrollToRow = row && row.index;
-        this.forceUpdate(updateOptions);
+        return row && row.index;
     }
 
     protected readonly updateDecorations = debounce(() => this.doUpdateDecorations(), 150);
@@ -255,6 +292,10 @@ export class TreeWidget extends ReactWidget implements StatefulWidget {
                     this.model.selectNode(firstChild);
                 }
             }
+        }
+        // it has to be called after nodes are selected
+        if (this.props.globalSelection) {
+            this.updateGlobalSelection();
         }
         this.forceUpdate();
     }
@@ -514,15 +555,16 @@ export class TreeWidget extends ReactWidget implements StatefulWidget {
 
         const overlayIcons: React.ReactNode[] = [];
         new Map(this.getDecorationData(node, 'iconOverlay').reverse().filter(notEmpty)
-            .map(overlay => [overlay.position, overlay] as [TreeDecoration.IconOverlayPosition, TreeDecoration.IconOverlay]))
+            .map(overlay => [overlay.position, overlay] as [TreeDecoration.IconOverlayPosition, TreeDecoration.IconOverlay | TreeDecoration.IconClassOverlay]))
             .forEach((overlay, position) => {
-                const overlayClass = (iconName: string) =>
-                    ['a', 'fa', `fa-${iconName}`, TreeDecoration.Styles.DECORATOR_SIZE_CLASS, TreeDecoration.IconOverlayPosition.getStyle(position)].join(' ');
+                const iconClasses = [TreeDecoration.Styles.DECORATOR_SIZE_CLASS, TreeDecoration.IconOverlayPosition.getStyle(position)];
                 const style = (color?: string) => color === undefined ? {} : { color };
                 if (overlay.background) {
-                    overlayIcons.push(<span key={node.id + 'bg'} className={overlayClass(overlay.background.shape)} style={style(overlay.background.color)}></span>);
+                    overlayIcons.push(<span key={node.id + 'bg'} className={this.getIconClass(overlay.background.shape, iconClasses)} style={style(overlay.background.color)}>
+                    </span>);
                 }
-                overlayIcons.push(<span key={node.id} className={overlayClass(overlay.icon)} style={style(overlay.color)}></span>);
+                const overlayIcon = (overlay as TreeDecoration.IconOverlay).icon || (overlay as TreeDecoration.IconClassOverlay).iconClass;
+                overlayIcons.push(<span key={node.id} className={this.getIconClass(overlayIcon, iconClasses)} style={style(overlay.color)}></span>);
             });
 
         if (overlayIcons.length > 0) {
@@ -533,16 +575,27 @@ export class TreeWidget extends ReactWidget implements StatefulWidget {
     }
 
     protected renderTailDecorations(node: TreeNode, props: NodeProps): React.ReactNode {
-        const style = (fontData: TreeDecoration.FontData | undefined) => this.applyFontStyles({}, fontData);
         return <React.Fragment>
             {this.getDecorationData(node, 'tailDecorations').filter(notEmpty).reduce((acc, current) => acc.concat(current), []).map((decoration, index) => {
-                const { fontData, data, tooltip } = decoration;
+                const { tooltip } = decoration;
+                const { data, fontData } = decoration as TreeDecoration.TailDecoration;
+                const color = (decoration as TreeDecoration.TailDecorationIcon).color;
+                const icon = (decoration as TreeDecoration.TailDecorationIcon).icon || (decoration as TreeDecoration.TailDecorationIconClass).iconClass;
                 const className = [TREE_NODE_SEGMENT_CLASS, TREE_NODE_TAIL_CLASS].join(' ');
-                return <div key={node.id + className + index} className={className} style={style(fontData)} title={tooltip}>
-                    {data}
+                const style = fontData ? this.applyFontStyles({}, fontData) : color ? { color } : undefined;
+                const content = data ? data : icon ? <span key={node.id + 'icon' + index} className={this.getIconClass(icon)}></span> : '';
+                return <div key={node.id + className + index} className={className} style={style} title={tooltip}>
+                    {content}
                 </div>;
             })}
         </React.Fragment>;
+    }
+
+    // Determine the classes to use for an icon
+    // Assumes a Font Awesome name when passed a single string, otherwise uses the passed string array
+    private getIconClass(iconName: string | string[], additionalClasses: string[] = []): string {
+        const iconClass = (typeof iconName === 'string') ? ['a', 'fa', `fa-${iconName}`] : ['a'].concat(iconName);
+        return iconClass.concat(additionalClasses).join(' ');
     }
 
     protected renderNode(node: TreeNode, props: NodeProps): React.ReactNode {

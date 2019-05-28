@@ -16,8 +16,7 @@
 
 import { inject, injectable } from 'inversify';
 import URI from '@theia/core/lib/common/uri';
-import { notEmpty } from '@theia/core/lib/common/objects';
-import { UriSelection } from '@theia/core/lib/common/selection';
+import { environment } from '@theia/application-package/lib/environment';
 import { SelectionService } from '@theia/core/lib/common/selection-service';
 import { Command, CommandContribution, CommandRegistry } from '@theia/core/lib/common/command';
 import { UriAwareCommandHandler, UriCommandHandler } from '@theia/core/lib/common/uri-command-handler';
@@ -50,28 +49,11 @@ export class FileDownloadCommandContribution implements CommandContribution {
     }
 
     protected isDownloadEnabled(uris: URI[]): boolean {
-        return uris.length > 0 && uris.every(u => u.scheme === 'file');
+        return !environment.electron.is() && uris.length > 0 && uris.every(u => u.scheme === 'file');
     }
 
     protected isDownloadVisible(uris: URI[]): boolean {
         return this.isDownloadEnabled(uris);
-    }
-
-    protected getUris(uri: Object | undefined): URI[] {
-        if (uri === undefined) {
-            return [];
-        }
-        return (Array.isArray(uri) ? uri : [uri]).map(u => this.getUri(u)).filter(notEmpty);
-    }
-
-    protected getUri(uri: Object | undefined): URI | undefined {
-        if (uri instanceof URI) {
-            return uri;
-        }
-        if (UriSelection.is(uri)) {
-            return uri.uri;
-        }
-        return undefined;
     }
 
 }
@@ -79,7 +61,9 @@ export class FileDownloadCommandContribution implements CommandContribution {
 export namespace FileDownloadCommands {
 
     export const DOWNLOAD: Command = {
-        id: 'file.download'
+        id: 'file.download',
+        category: 'File',
+        label: 'Download'
     };
 
 }

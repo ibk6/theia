@@ -166,6 +166,7 @@ export class HostedPluginManagerClient {
         } catch (error) {
             this.messageService.error('Failed to run hosted plugin instance: ' + this.getErrorMessage(error));
             this.stateChanged.fire({ state: HostedInstanceState.FAILED, pluginLocation: this.pluginLocation });
+            this.stop();
         }
     }
 
@@ -227,6 +228,7 @@ export class HostedPluginManagerClient {
             }
             this.messageService.error('Failed to run hosted plugin instance: ' + this.getErrorMessage(lastError));
             this.stateChanged.fire({ state: HostedInstanceState.FAILED, pluginLocation: this.pluginLocation! });
+            this.stop();
         } else {
             this.messageService.warn('Hosted Plugin instance is not running.');
         }
@@ -247,7 +249,10 @@ export class HostedPluginManagerClient {
 
         const dialog = this.openFileDialogFactory({
             title: HostedPluginCommands.SELECT_PATH.label!,
-            canSelectFiles: false
+            openLabel: 'Select',
+            canSelectFiles: false,
+            canSelectFolders: true,
+            canSelectMany: false
         });
         dialog.model.navigateTo(rootNode);
         const result = await dialog.open();

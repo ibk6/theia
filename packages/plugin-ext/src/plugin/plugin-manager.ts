@@ -85,10 +85,16 @@ export class PluginManagerExtImpl implements PluginManagerExt, PluginManager {
                 dispose(pluginContext.subscriptions);
             }
         });
+
+        // clean map
+        this.activatedPlugins.clear();
+        this.pluginActivationPromises.clear();
+        this.pluginContextsMap.clear();
+
         return Promise.resolve();
     }
 
-    $init(pluginInit: PluginInitData, configStorage: ConfigStorage): PromiseLike<void> {
+    async $init(pluginInit: PluginInitData, configStorage: ConfigStorage): Promise<void> {
         this.storageProxy = this.rpc.set(
             MAIN_RPC_CONTEXT.STORAGE_EXT,
             new KeyValueStorageProxy(this.rpc.getProxy(PLUGIN_RPC_CONTEXT.STORAGE_MAIN),
@@ -98,6 +104,7 @@ export class PluginManagerExtImpl implements PluginManagerExt, PluginManager {
 
         // init query parameters
         this.envExt.setQueryParameters(pluginInit.env.queryParams);
+        this.envExt.setLanguage(pluginInit.env.language);
 
         this.preferencesManager.init(pluginInit.preferences);
 
@@ -117,10 +124,13 @@ export class PluginManagerExtImpl implements PluginManagerExt, PluginManager {
 
         // run plugins
         for (const plugin of plugins) {
+            if (!plugin.pluginPath) {
+                continue;
+            }
             const pluginMain = this.host.loadPlugin(plugin);
             // able to load the plug-in ?
             if (pluginMain !== undefined) {
-                this.startPlugin(plugin, configStorage, pluginMain);
+                await this.startPlugin(plugin, configStorage, pluginMain);
             } else {
                 console.error(`Unable to load a plugin from "${plugin.pluginPath}"`);
             }
@@ -140,7 +150,7 @@ export class PluginManagerExtImpl implements PluginManagerExt, PluginManager {
     }
 
     // tslint:disable-next-line:no-any
-    private startPlugin(plugin: Plugin, configStorage: ConfigStorage, pluginMain: any): void {
+    private async startPlugin(plugin: Plugin, configStorage: ConfigStorage, pluginMain: any): Promise<void> {
         const subscriptions: theia.Disposable[] = [];
         const asAbsolutePath = (relativePath: string): string => join(plugin.pluginFolder, relativePath);
         const logPath = join(configStorage.hostLogPath, plugin.model.id); // todo check format
@@ -161,7 +171,7 @@ export class PluginManagerExtImpl implements PluginManagerExt, PluginManager {
             stopFn = pluginMain[plugin.lifecycle.stopMethod];
         }
         if (typeof pluginMain[plugin.lifecycle.startMethod] === 'function') {
-            const pluginExport = pluginMain[plugin.lifecycle.startMethod].apply(getGlobal(), [pluginContext]);
+            const pluginExport = await pluginMain[plugin.lifecycle.startMethod].apply(getGlobal(), [pluginContext]);
             this.activatedPlugins.set(plugin.model.id, new ActivatedPlugin(pluginContext, pluginExport, stopFn));
 
             // resolve activation promise

@@ -21,6 +21,7 @@ import { Endpoint } from '@theia/core/lib/browser/endpoint';
 import { StatusBar, StatusBarAlignment } from '@theia/core/lib/browser/status-bar';
 import { FileSystem } from '../../common/filesystem';
 import { FileDownloadData } from '../../common/download/file-download-data';
+import { MessageService } from '@theia/core/lib/common/message-service';
 
 @injectable()
 export class FileDownloadService {
@@ -39,6 +40,9 @@ export class FileDownloadService {
 
     @inject(StatusBar)
     protected readonly statusBar: StatusBar;
+
+    @inject(MessageService)
+    protected readonly messageService: MessageService;
 
     async download(uris: URI[]): Promise<void> {
         if (uris.length === 0) {
@@ -61,7 +65,7 @@ export class FileDownloadService {
             const title = await this.title(response, uris);
             const { status, statusText } = response;
             if (status === 200) {
-                await this.forceDownload(response, title);
+                await this.forceDownload(response, decodeURIComponent(title));
             } else {
                 throw new Error(`Received unexpected status code: ${status}. [${statusText}]`);
             }
@@ -87,12 +91,17 @@ export class FileDownloadService {
             url = URL.createObjectURL(blob);
             if (this.anchor === undefined) {
                 this.anchor = document.createElement('a');
-                this.anchor.style.display = 'none';
             }
             this.anchor.href = url;
+            this.anchor.style.display = 'none';
             this.anchor.download = title;
+            document.body.appendChild(this.anchor);
             this.anchor.click();
         } finally {
+            // make sure anchor is removed from parent
+            if (this.anchor && this.anchor.parentNode) {
+                this.anchor.parentNode.removeChild(this.anchor);
+            }
             if (url) {
                 URL.revokeObjectURL(url);
             }
@@ -155,8 +164,12 @@ export class FileDownloadService {
     }
 
     protected endpoint(): string {
-        const url = new Endpoint({ path: 'files' }).getRestUrl().toString();
+        const url = this.filesUrl();
         return url.endsWith('/') ? url.slice(0, -1) : url;
+    }
+
+    protected filesUrl(): string {
+        return new Endpoint({ path: 'files' }).getRestUrl().toString();
     }
 
 }

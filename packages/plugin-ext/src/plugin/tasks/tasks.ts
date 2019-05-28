@@ -37,6 +37,8 @@ export class TasksExtImpl implements TasksExt {
 
     private readonly onDidExecuteTask: Emitter<theia.TaskStartEvent> = new Emitter<theia.TaskStartEvent>();
     private readonly onDidTerminateTask: Emitter<theia.TaskEndEvent> = new Emitter<theia.TaskEndEvent>();
+    private readonly onDidExecuteTaskProcess: Emitter<theia.TaskProcessStartEvent> = new Emitter<theia.TaskProcessStartEvent>();
+    private readonly onDidTerminateTaskProcess: Emitter<theia.TaskProcessEndEvent> = new Emitter<theia.TaskProcessEndEvent>();
 
     constructor(rpc: RPCProtocol) {
         this.proxy = rpc.getProxy(PLUGIN_RPC_CONTEXT.TASKS_MAIN);
@@ -74,25 +76,52 @@ export class TasksExtImpl implements TasksExt {
         });
     }
 
+    get onDidStartTaskProcess(): Event<theia.TaskProcessStartEvent> {
+        return this.onDidExecuteTaskProcess.event;
+    }
+
+    $onDidStartTaskProcess(processId: number, executionDto: TaskExecutionDto): void {
+        this.onDidExecuteTaskProcess.fire({
+            processId,
+            execution: this.getTaskExecution(executionDto)
+        });
+    }
+
+    get onDidEndTaskProcess(): Event<theia.TaskProcessEndEvent> {
+        return this.onDidTerminateTaskProcess.event;
+    }
+
+    $onDidEndTaskProcess(exitCode: number, taskId: number): void {
+        const taskExecution = this.executions.get(taskId);
+        if (!taskExecution) {
+            throw new Error(`Task execution with id ${taskId} is not found`);
+        }
+
+        this.onDidTerminateTaskProcess.fire({
+            execution: taskExecution,
+            exitCode
+        });
+    }
+
     registerTaskProvider(type: string, provider: theia.TaskProvider): theia.Disposable {
         const callId = this.addNewAdapter(new TaskProviderAdapter(provider));
         this.proxy.$registerTaskProvider(callId, type);
         return this.createDisposable(callId);
     }
 
-    $provideTasks(handle: number): Promise<TaskDto[] | undefined> {
+    $provideTasks(handle: number, token?: theia.CancellationToken): Promise<TaskDto[] | undefined> {
         const adapter = this.adaptersMap.get(handle);
         if (adapter) {
-            return adapter.provideTasks();
+            return adapter.provideTasks(token);
         } else {
             return Promise.reject(new Error('No adapter found to provide tasks'));
         }
     }
 
-    $resolveTask(handle: number, task: TaskDto): Promise<TaskDto | undefined> {
+    $resolveTask(handle: number, task: TaskDto, token?: theia.CancellationToken): Promise<TaskDto | undefined> {
         const adapter = this.adaptersMap.get(handle);
         if (adapter) {
-            return adapter.resolveTask(task);
+            return adapter.resolveTask(task, token);
         } else {
             return Promise.reject(new Error('No adapter found to resolve task'));
         }

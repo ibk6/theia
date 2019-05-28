@@ -17,7 +17,7 @@
 import { injectable, inject, postConstruct } from 'inversify';
 import { Message } from '@phosphor/messaging';
 import URI from '@theia/core/lib/common/uri';
-import { CommandService, SelectionService, Disposable } from '@theia/core/lib/common';
+import { CommandService, SelectionService } from '@theia/core/lib/common';
 import { CommonCommands, CorePreferences } from '@theia/core/lib/browser';
 import {
     ContextMenuRenderer, ExpandableTreeNode,
@@ -71,12 +71,9 @@ export class FileNavigatorWidget extends FileTreeWidget {
         super.init();
         this.updateSelectionContextKeys();
         this.toDispose.pushAll([
-            this.model.onSelectionChanged(selection => {
-                if (this.shell.activeWidget === this) {
-                    this.selectionService.selection = selection;
-                }
-                this.updateSelectionContextKeys();
-            }),
+            this.model.onSelectionChanged(() =>
+                this.updateSelectionContextKeys()
+            ),
             this.model.onExpansionChanged(node => {
                 if (node.expanded && node.children.length === 1) {
                     const child = node.children[0];
@@ -84,18 +81,9 @@ export class FileNavigatorWidget extends FileTreeWidget {
                         this.model.expandNode(child);
                     }
                 }
-            }),
-            Disposable.create(() => {
-                if (this.selectionService.selection === this) {
-                    this.selectionService.selection = undefined;
-                }
+
             })
         ]);
-    }
-
-    protected onActivateRequest(msg: Message): void {
-        super.onActivateRequest(msg);
-        this.selectionService.selection = this.model.selectedNodes;
     }
 
     protected async initialize(): Promise<void> {
@@ -170,20 +158,22 @@ export class FileNavigatorWidget extends FileTreeWidget {
 
     protected handleCopy(event: ClipboardEvent): void {
         const uris = this.model.selectedFileStatNodes.map(node => node.uri.toString());
-        if (uris.length > 0) {
+        if (uris.length > 0 && event.clipboardData) {
             event.clipboardData.setData('text/plain', uris.join('\n'));
             event.preventDefault();
         }
     }
 
     protected handlePaste(event: ClipboardEvent): void {
-        const raw = event.clipboardData.getData('text/plain');
-        if (!raw) {
-            return;
-        }
-        const uri = new URI(raw);
-        if (this.model.copy(uri)) {
-            event.preventDefault();
+        if (event.clipboardData) {
+            const raw = event.clipboardData.getData('text/plain');
+            if (!raw) {
+                return;
+            }
+            const uri = new URI(raw);
+            if (this.model.copy(uri)) {
+                event.preventDefault();
+            }
         }
     }
 
@@ -225,7 +215,8 @@ export class FileNavigatorWidget extends FileTreeWidget {
     }
 
     protected handleClickEvent(node: TreeNode | undefined, event: React.MouseEvent<HTMLElement>): void {
-        if (node && this.corePreferences['list.openMode'] === 'singleClick') {
+        const modifierKeyCombined: boolean = isOSX ? (event.shiftKey || event.metaKey) : (event.shiftKey || event.ctrlKey);
+        if (!modifierKeyCombined && node && this.corePreferences['list.openMode'] === 'singleClick') {
             this.model.previewNode(node);
         }
         super.handleClickEvent(node, event);

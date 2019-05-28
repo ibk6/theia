@@ -17,7 +17,7 @@
 import * as Xterm from 'xterm';
 import { proposeGeometry } from 'xterm/lib/addons/fit/fit';
 import { inject, injectable, named, postConstruct } from 'inversify';
-import { Disposable, Event, Emitter, ILogger, DisposableCollection } from '@theia/core';
+import { ContributionProvider, Disposable, Event, Emitter, ILogger, DisposableCollection } from '@theia/core';
 import { Widget, Message, WebSocketConnectionProvider, StatefulWidget, isFirefox, MessageLoop, KeyCode } from '@theia/core/lib/browser';
 import { isOSX } from '@theia/core/lib/common';
 import { WorkspaceService } from '@theia/workspace/lib/browser';
@@ -30,6 +30,8 @@ import { TerminalWidgetOptions, TerminalWidget } from './base/terminal-widget';
 import { MessageConnection } from 'vscode-jsonrpc';
 import { Deferred } from '@theia/core/lib/common/promise-util';
 import { TerminalPreferences } from './terminal-preferences';
+import { TerminalContribution } from './terminal-contribution';
+import URI from '@theia/core/lib/common/uri';
 
 export const TERMINAL_WIDGET_FACTORY_ID = 'terminal';
 
@@ -59,6 +61,7 @@ export class TerminalWidgetImpl extends TerminalWidget implements StatefulWidget
     protected restored = false;
     protected closeOnDispose = true;
     protected waitForConnection: Deferred<MessageConnection> | undefined;
+    protected hoverMessage: HTMLDivElement;
 
     @inject(WorkspaceService) protected readonly workspaceService: WorkspaceService;
     @inject(WebSocketConnectionProvider) protected readonly webSocketConnectionProvider: WebSocketConnectionProvider;
@@ -69,6 +72,7 @@ export class TerminalWidgetImpl extends TerminalWidget implements StatefulWidget
     @inject(ILogger) @named('terminal') protected readonly logger: ILogger;
     @inject('terminal-dom-id') public readonly id: string;
     @inject(TerminalPreferences) protected readonly preferences: TerminalPreferences;
+    @inject(ContributionProvider) @named(TerminalContribution) protected readonly terminalContributionProvider: ContributionProvider<TerminalContribution>;
 
     protected readonly onDidOpenEmitter = new Emitter<void>();
     readonly onDidOpen: Event<void> = this.onDidOpenEmitter.event;
@@ -83,7 +87,7 @@ export class TerminalWidgetImpl extends TerminalWidget implements StatefulWidget
 
         if (this.options.destroyTermOnClose === true) {
             this.toDispose.push(Disposable.create(() =>
-                this.term.destroy()
+                this.term.dispose()
             ));
         }
 
@@ -109,6 +113,21 @@ export class TerminalWidgetImpl extends TerminalWidget implements StatefulWidget
                 selection: cssProps.selection
             },
         });
+
+        this.hoverMessage = document.createElement('div');
+        this.hoverMessage.textContent = 'Cmd + click to follow link';
+        this.hoverMessage.style.position = 'fixed';
+        this.hoverMessage.style.color = 'var(--theia-ui-font-color1)';
+        this.hoverMessage.style.backgroundColor = 'var(--theia-layout-color1)';
+        this.hoverMessage.style.borderColor = 'var(--theia-layout-color3)';
+        this.hoverMessage.style.borderWidth = '0.5px';
+        this.hoverMessage.style.borderStyle = 'solid';
+        this.hoverMessage.style.padding = '5px';
+        this.hoverMessage.style.zIndex = '1';
+        // initially invisible
+        this.hoverMessage.style.display = 'none';
+        this.node.appendChild(this.hoverMessage);
+
         this.toDispose.push(this.preferences.onPreferenceChanged(change => {
             const lastSeparator = change.preferenceName.lastIndexOf('.');
             if (lastSeparator > 0) {
@@ -129,11 +148,12 @@ export class TerminalWidgetImpl extends TerminalWidget implements StatefulWidget
             });
         }));
         this.attachCustomKeyEventHandler();
-        this.term.on('title', (title: string) => {
+        const titleChangeListenerDispose = this.term.onTitleChange((title: string) => {
             if (this.options.useServerTitle) {
                 this.title.label = title;
             }
         });
+        this.toDispose.push(titleChangeListenerDispose);
 
         this.toDispose.push(this.terminalWatcher.onTerminalError(({ terminalId, error }) => {
             if (terminalId === this.terminalId) {
@@ -160,15 +180,43 @@ export class TerminalWidgetImpl extends TerminalWidget implements StatefulWidget
         }));
         this.toDispose.push(this.onTermDidClose);
         this.toDispose.push(this.onDidOpenEmitter);
+
+        for (const contribution of this.terminalContributionProvider.getContributions()) {
+            contribution.onCreate(this);
+        }
+    }
+
+    showHoverMessage(x: number, y: number, message: string) {
+        this.hoverMessage.innerText = message;
+        this.hoverMessage.style.display = 'inline';
+        this.hoverMessage.style.top = `${y - 30}px`;
+        this.hoverMessage.style.left = `${x - 60}px`;
+    }
+
+    hideHover() {
+        this.hoverMessage.style.display = 'none';
+    }
+
+    getTerminal() {
+        return this.term;
+    }
+
+    get cwd(): Promise<URI> {
+        if (!IBaseTerminalServer.validateId(this.terminalId)) {
+            throw new Error('terminal is not started');
+        }
+        return this.shellTerminalServer.getCwdURI(this.terminalId).then(cwdUrl => new URI(cwdUrl));
     }
 
     get processId(): Promise<number> {
-        return (async () => {
-            if (!IBaseTerminalServer.validateId(this.terminalId)) {
-                throw new Error('terminal is not started');
-            }
-            return this.shellTerminalServer.getProcessId(this.terminalId);
-        })();
+        if (!IBaseTerminalServer.validateId(this.terminalId)) {
+            throw new Error('terminal is not started');
+        }
+        return this.shellTerminalServer.getProcessId(this.terminalId);
+    }
+
+    onDispose(onDispose: () => void) {
+        this.toDispose.push(Disposable.create(onDispose));
     }
 
     clearOutput(): void {
@@ -288,18 +336,23 @@ export class TerminalWidgetImpl extends TerminalWidget implements StatefulWidget
         }
     }
     protected onFitRequest(msg: Message): void {
+        super.onFitRequest(msg);
         MessageLoop.sendMessage(this, Widget.ResizeMessage.UnknownSize);
     }
     protected onActivateRequest(msg: Message): void {
+        super.onActivateRequest(msg);
         this.term.focus();
     }
     protected onAfterShow(msg: Message): void {
+        super.onAfterShow(msg);
         this.update();
     }
     protected onAfterAttach(msg: Message): void {
+        super.onAfterAttach(msg);
         this.update();
     }
     protected onResize(msg: Widget.ResizeMessage): void {
+        super.onResize(msg);
         this.needsResize = true;
         this.update();
     }
@@ -335,8 +388,8 @@ export class TerminalWidgetImpl extends TerminalWidget implements StatefulWidget
                 connection.onNotification('onData', (data: string) => this.write(data));
 
                 const sendData = (data?: string) => data && connection.sendRequest('write', data);
-                this.term.on('data', sendData);
-                connection.onDispose(() => this.term.off('data', sendData));
+                const disposable = this.term.onData(sendData);
+                connection.onDispose(() => disposable.dispose());
 
                 this.toDisposeOnConnect.push(connection);
                 connection.listen();

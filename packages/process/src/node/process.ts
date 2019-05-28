@@ -17,6 +17,11 @@
 import { injectable, unmanaged } from 'inversify';
 import { ProcessManager } from './process-manager';
 import { ILogger, Emitter, Event } from '@theia/core/lib/common';
+import { FileUri } from '@theia/core/lib/node';
+import { isOSX, isWindows } from '@theia/core';
+import { Readable, Writable } from 'stream';
+import { exec } from 'child_process';
+import * as fs from 'fs';
 
 export interface IProcessExitEvent {
     // Exactly one of code and signal will be set.
@@ -33,7 +38,7 @@ export interface IProcessStartEvent {
 /**
  * Data emitted when a process has failed to start.
  */
-export interface ProcessErrorEvent {
+export interface ProcessErrorEvent extends Error {
     /** An errno-like error string (e.g. ENOENT).  */
     code: string;
 }
@@ -51,10 +56,13 @@ export enum ProcessType {
  *
  *   https://nodejs.org/api/child_process.html#child_process_child_process_spawn_command_args_options
  */
-export interface ProcessOptions {
+export interface ProcessOptions<T = string> {
     readonly command: string,
-    args?: string[],
-    options?: object
+    args?: T[],
+    options?: {
+        // tslint:disable-next-line:no-any
+        [key: string]: any
+    }
 }
 
 /**
@@ -78,8 +86,27 @@ export abstract class Process {
     protected readonly startEmitter: Emitter<IProcessStartEvent> = new Emitter<IProcessStartEvent>();
     protected readonly exitEmitter: Emitter<IProcessExitEvent> = new Emitter<IProcessExitEvent>();
     protected readonly errorEmitter: Emitter<ProcessErrorEvent> = new Emitter<ProcessErrorEvent>();
-    abstract readonly pid: number;
     protected _killed = false;
+
+    /**
+     * The OS process id.
+     */
+    abstract readonly pid: number;
+
+    /**
+     * The stdout stream.
+     */
+    abstract readonly outputStream: Readable;
+
+    /**
+     * The stderr stream.
+     */
+    abstract readonly errorStream: Readable;
+
+    /**
+     * The stdin stream.
+     */
+    abstract readonly inputStream: Writable;
 
     constructor(
         protected readonly processManager: ProcessManager,
@@ -88,6 +115,7 @@ export abstract class Process {
         protected readonly options: ProcessOptions | ForkOptions
     ) {
         this.id = this.processManager.register(this);
+        this.initialCwd = options && options.options && 'cwd' in options.options && options.options['cwd'].toString() || __dirname;
     }
 
     abstract kill(signal?: string): void;
@@ -136,6 +164,10 @@ export abstract class Process {
         this.errorEmitter.fire(err);
     }
 
+    protected async emitOnErrorAsync(error: ProcessErrorEvent) {
+        process.nextTick(this.emitOnError.bind(this), error);
+    }
+
     protected handleOnError(error: ProcessErrorEvent) {
         this._killed = true;
         this.logger.error(error);
@@ -144,5 +176,38 @@ export abstract class Process {
     // tslint:disable-next-line:no-any
     protected isForkOptions(options: any): options is ForkOptions {
         return !!options && !!options.modulePath;
+    }
+
+    protected readonly initialCwd: string;
+
+    /**
+     * @returns the current working directory as a URI (usually file:// URI)
+     */
+    public getCwdURI(): Promise<string> {
+        if (isOSX) {
+            return new Promise<string>(resolve => {
+                exec('lsof -p ' + this.pid + ' | grep cwd', (error, stdout, stderr) => {
+                    if (stdout !== '') {
+                        resolve(FileUri.create(stdout.substring(stdout.indexOf('/'), stdout.length - 1)).toString());
+                    } else {
+                        resolve(FileUri.create(this.initialCwd).toString());
+                    }
+                });
+            });
+        } else if (!isWindows) {
+            return new Promise<string>(resolve => {
+                resolve(FileUri.create(this.initialCwd).toString());
+            });
+        } else {
+            return new Promise<string>(resolve => {
+                fs.readlink('/proc/' + this.pid + '/cwd', (err, linkedstr) => {
+                    if (err || !linkedstr) {
+                        resolve(FileUri.create(this.initialCwd).toString());
+                    } else {
+                        resolve(FileUri.create(linkedstr).toString());
+                    }
+                });
+            });
+        }
     }
 }

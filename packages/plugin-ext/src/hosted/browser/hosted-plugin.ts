@@ -34,6 +34,7 @@ import { StoragePathService } from '../../main/browser/storage-path-service';
 import { getPreferences } from '../../main/browser/preference-registry-main';
 import { PluginServer } from '../../common/plugin-protocol';
 import { KeysToKeysToAnyValue } from '../../common/types';
+import { FileStat } from '@theia/filesystem/lib/common/filesystem';
 
 @injectable()
 export class HostedPluginSupport {
@@ -65,6 +66,12 @@ export class HostedPluginSupport {
     private frontendExtManagerProxy: PluginManagerExt;
     private backendExtManagerProxy: PluginManagerExt;
 
+    // loaded plugins per #id
+    private loadedPlugins: Set<string> = new Set<string>();
+
+    // per #hostKey
+    private rpc: Map<string, RPCProtocol> = new Map<string, RPCProtocol>();
+
     constructor(
         @inject(PreferenceServiceImpl) private readonly preferenceServiceImpl: PreferenceServiceImpl,
         @inject(PluginPathsService) private readonly pluginPathsService: PluginPathsService,
@@ -72,7 +79,6 @@ export class HostedPluginSupport {
         @inject(WorkspaceService) protected readonly workspaceService: WorkspaceService,
     ) {
         this.theiaReadyPromise = Promise.all([this.preferenceServiceImpl.ready, this.workspaceService.roots]);
-
         this.storagePathService.onStoragePathChanged(path => {
             this.updateStoragePath(path);
         });
@@ -92,6 +98,7 @@ export class HostedPluginSupport {
             this.server.getExtPluginAPI(),
             this.pluginServer.keyValueStorageGetAll(true),
             this.pluginServer.keyValueStorageGetAll(false),
+            this.workspaceService.roots,
         ]).then(metadata => {
             const pluginsInitData: PluginsInitializationData = {
                 plugins: metadata['0'],
@@ -100,7 +107,8 @@ export class HostedPluginSupport {
                 storagePath: metadata['3'],
                 pluginAPIs: metadata['4'],
                 globalStates: metadata['5'],
-                workspaceStates: metadata['6']
+                workspaceStates: metadata['6'],
+                roots: metadata['7']
             };
             this.loadPlugins(pluginsInitData, this.container);
         }).catch(e => console.error(e));
@@ -110,6 +118,10 @@ export class HostedPluginSupport {
         if (initData.hostedPlugin) {
             initData.plugins.push(initData.hostedPlugin);
         }
+
+        // don't load plugins twice
+        initData.plugins = initData.plugins.filter(value => !this.loadedPlugins.has(value.model.id));
+
         const confStorage: ConfigStorage = {
             hostLogPath: initData.logPath,
             hostStoragePath: initData.storagePath || ''
@@ -121,10 +133,10 @@ export class HostedPluginSupport {
                 const hostedExtManager = worker.rpc.getProxy(MAIN_RPC_CONTEXT.HOSTED_PLUGIN_MANAGER_EXT);
                 hostedExtManager.$init({
                     plugins: initData.plugins,
-                    preferences: getPreferences(this.preferenceProviderProvider),
+                    preferences: getPreferences(this.preferenceProviderProvider, initData.roots),
                     globalState: initData.globalStates,
                     workspaceState: initData.workspaceStates,
-                    env: { queryParams: getQueryParameters() },
+                    env: { queryParams: getQueryParameters(), language: navigator.language },
                     extApi: initData.pluginAPIs
                 }, confStorage);
                 setUpPluginApi(worker.rpc, container);
@@ -151,21 +163,30 @@ export class HostedPluginSupport {
                     if (plugins.length >= 1) {
                         pluginID = getPluginId(plugins[0].model);
                     }
-                    const rpc = this.createServerRpc(pluginID, hostKey);
-                    setUpPluginApi(rpc, container);
+
+                    let rpc = this.rpc.get(hostKey);
+                    if (!rpc) {
+                        rpc = this.createServerRpc(pluginID, hostKey);
+                        setUpPluginApi(rpc, container);
+                        this.rpc.set(hostKey, rpc);
+                    }
+
                     const hostedExtManager = rpc.getProxy(MAIN_RPC_CONTEXT.HOSTED_PLUGIN_MANAGER_EXT);
                     hostedExtManager.$init({
                         plugins: plugins,
-                        preferences: getPreferences(this.preferenceProviderProvider),
+                        preferences: getPreferences(this.preferenceProviderProvider, initData.roots),
                         globalState: initData.globalStates,
                         workspaceState: initData.workspaceStates,
-                        env: { queryParams: getQueryParameters() },
+                        env: { queryParams: getQueryParameters(), language: navigator.language },
                         extApi: initData.pluginAPIs
                     }, confStorage);
-                    this.mainPluginApiProviders.getContributions().forEach(p => p.initialize(rpc, container));
+                    this.mainPluginApiProviders.getContributions().forEach(p => p.initialize(rpc!, container));
                     this.backendExtManagerProxy = hostedExtManager;
                 });
             }
+
+            // update list with loaded plugins
+            initData.plugins.forEach(value => this.loadedPlugins.add(value.model.id));
         });
     }
 
@@ -174,9 +195,7 @@ export class HostedPluginSupport {
         for (const plugin of pluginsMetadata) {
             if (plugin.model.entryPoint.frontend) {
                 result[0] = true;
-            }
-
-            if (plugin.model.entryPoint.backend) {
+            } else {
                 result[1] = true;
             }
 
@@ -218,5 +237,6 @@ interface PluginsInitializationData {
     storagePath: string | undefined,
     pluginAPIs: ExtPluginApi[],
     globalStates: KeysToKeysToAnyValue,
-    workspaceStates: KeysToKeysToAnyValue
+    workspaceStates: KeysToKeysToAnyValue,
+    roots: FileStat[],
 }

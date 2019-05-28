@@ -24,7 +24,7 @@ import { GitHistoryWidget } from './git-history-widget';
 import { Git } from '../../common';
 import { GitRepositoryTracker } from '../git-repository-tracker';
 import { GitRepositoryProvider } from '../git-repository-provider';
-import { EDITOR_CONTEXT_MENU_GIT } from '../git-view-contribution';
+import { EDITOR_CONTEXT_MENU_GIT } from '../git-contribution';
 
 export const GIT_HISTORY_ID = 'git-history';
 export const GIT_HISTORY_LABEL = 'Git History';
@@ -112,9 +112,7 @@ export class GitHistoryContribution extends AbstractViewContribution<GitHistoryW
             isVisible: (uri: URI) => !!this.repositoryProvider.findRepository(uri),
             execute: async uri => this.openView({ activate: true, uri: uri.toString() }),
         }));
-        commands.registerCommand(GitHistoryCommands.OPEN_BRANCH_HISTORY, {
-            execute: () => this.openView({ activate: true, uri: undefined })
-        });
+        super.registerCommands(commands);
     }
 
     protected async refreshWidget(uri: string | undefined) {

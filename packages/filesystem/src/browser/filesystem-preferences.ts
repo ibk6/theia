@@ -44,18 +44,24 @@ export const filesystemPreferenceSchema: PreferenceSchema = {
             'description': 'Configure glob patterns for excluding files and folders.',
             'scope': 'resource'
         },
-        'files.associations': {
-            'description': 'Configure file associations to languages (e.g. "*.extension": "html"). \
-These have precedence over the default associations of the languages installed',
-            'type': 'object',
-            'default': {}
+        'files.enableTrash': {
+            'type': 'boolean',
+            'default': true,
+            'description': 'Moves files/folders to the OS trash (recycle bin on Windows) when deleting. Disabling this will delete files/folders permanently.'
         },
+        'files.associations': {
+            'type': 'object',
+            'description': 'Configure file associations to languages (e.g. \"*.extension\": \"html\"). \
+These have precedence over the default associations of the languages installed.'
+        }
     }
 };
 
 export interface FileSystemConfiguration {
     'files.watcherExclude': { [globPattern: string]: boolean };
     'files.exclude': { [key: string]: boolean };
+    'files.enableTrash': boolean;
+    'files.associations': { [filepattern: string]: string };
 }
 
 export const FileSystemPreferences = Symbol('FileSystemPreferences');

@@ -33,6 +33,7 @@ import { ContextKeyService } from './context-key-service';
 import { OS, isOSX } from '../common/os';
 import { ResourceContextKey } from './resource-context-key';
 import { UriSelection } from '../common/selection';
+import { StorageService } from './storage-service';
 
 export namespace CommonMenus {
 
@@ -149,6 +150,11 @@ export namespace CommonCommands {
         category: VIEW_CATEGORY,
         label: 'Toggle Bottom Panel'
     };
+    export const TOGGLE_MAXIMIZED: Command = {
+        id: 'core.toggleMaximized',
+        category: VIEW_CATEGORY,
+        label: 'Toggle Maximized'
+    };
 
     export const SAVE: Command = {
         id: 'core.save',
@@ -192,6 +198,8 @@ export const supportCopy = browser.isNative || document.queryCommandSupported('c
 // privileges to actually perform the action
 export const supportPaste = browser.isNative || (!browser.isChrome && document.queryCommandSupported('paste'));
 
+export const RECENT_COMMANDS_STORAGE_KEY = 'commands';
+
 @injectable()
 export class CommonFrontendContribution implements FrontendApplicationContribution, MenuContribution, CommandContribution, KeybindingContribution {
 
@@ -209,6 +217,12 @@ export class CommonFrontendContribution implements FrontendApplicationContributi
     @inject(ResourceContextKey)
     protected readonly resourceContextKey: ResourceContextKey;
 
+    @inject(CommandRegistry)
+    protected readonly commandRegistry: CommandRegistry;
+
+    @inject(StorageService)
+    protected readonly storageService: StorageService;
+
     @postConstruct()
     protected init(): void {
         this.contextKeyService.createKey<boolean>('isLinux', OS.type() === OS.Type.Linux);
@@ -217,6 +231,16 @@ export class CommonFrontendContribution implements FrontendApplicationContributi
 
         this.initResourceContextKeys();
         this.registerCtrlWHandling();
+    }
+
+    onStart() {
+        this.storageService.getData<{ recent: Command[] }>(RECENT_COMMANDS_STORAGE_KEY, { recent: [] })
+            .then(tasks => this.commandRegistry.recent = tasks.recent);
+    }
+
+    onStop() {
+        const recent = this.commandRegistry.recent;
+        this.storageService.setData<{ recent: Command[] }>(RECENT_COMMANDS_STORAGE_KEY, { recent });
     }
 
     protected initResourceContextKeys(): void {
@@ -311,6 +335,11 @@ export class CommonFrontendContribution implements FrontendApplicationContributi
             commandId: CommonCommands.COLLAPSE_PANEL.id,
             label: 'Collapse',
             order: '4'
+        });
+        registry.registerMenuAction(SHELL_TABBAR_CONTEXT_MENU, {
+            commandId: CommonCommands.TOGGLE_MAXIMIZED.id,
+            label: 'Toggle Maximized',
+            order: '5'
         });
         registry.registerMenuAction(CommonMenus.HELP, {
             commandId: CommonCommands.ABOUT_COMMAND.id,
@@ -440,6 +469,11 @@ export class CommonFrontendContribution implements FrontendApplicationContributi
                 }
             }
         });
+        commandRegistry.registerCommand(CommonCommands.TOGGLE_MAXIMIZED, {
+            isEnabled: () => this.shell.canToggleMaximized(),
+            isVisible: () => this.shell.canToggleMaximized(),
+            execute: () => this.shell.toggleMaximized()
+        });
 
         commandRegistry.registerCommand(CommonCommands.SAVE, {
             execute: () => this.shell.save()
@@ -564,6 +598,10 @@ export class CommonFrontendContribution implements FrontendApplicationContributi
             {
                 command: CommonCommands.COLLAPSE_ALL_PANELS.id,
                 keybinding: 'alt+shift+c',
+            },
+            {
+                command: CommonCommands.TOGGLE_MAXIMIZED.id,
+                keybinding: 'ctrl+m',
             },
             // Saving
             {

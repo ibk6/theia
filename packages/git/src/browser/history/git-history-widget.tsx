@@ -19,14 +19,14 @@ import { DiffUris } from '@theia/core/lib/browser/diff-uris';
 import { OpenerService, open, StatefulWidget, SELECTED_CLASS, WidgetManager, ApplicationShell } from '@theia/core/lib/browser';
 import { CancellationTokenSource } from '@theia/core/lib/common/cancellation';
 import { Message } from '@phosphor/messaging';
-import { AutoSizer, List, ListRowRenderer, ListRowProps, InfiniteLoader, IndexRange, ScrollParams } from 'react-virtualized';
+import { AutoSizer, List, ListRowRenderer, ListRowProps, InfiniteLoader, IndexRange, ScrollParams, CellMeasurerCache, CellMeasurer } from 'react-virtualized';
 import { GIT_RESOURCE_SCHEME } from '../git-resource';
 import URI from '@theia/core/lib/common/uri';
 import { GIT_HISTORY_ID, GIT_HISTORY_MAX_COUNT, GIT_HISTORY_LABEL } from './git-history-contribution';
 import { GitFileStatus, Git, GitFileChange, Repository } from '../../common';
 import { FileSystem } from '@theia/filesystem/lib/common';
 import { GitDiffContribution } from '../diff/git-diff-contribution';
-import { GitAvatarService } from './git-avatar-service';
+import { ScmAvatarService } from '@theia/scm/lib/browser/scm-avatar-service';
 import { GitCommitDetailUri, GitCommitDetailOpenerOptions, GitCommitDetailOpenHandler } from './git-commit-detail-open-handler';
 import { GitCommitDetails } from './git-commit-detail-widget';
 import { GitNavigableListWidget } from '../git-navigable-list-widget';
@@ -67,7 +67,7 @@ export class GitHistoryWidget extends GitNavigableListWidget<GitHistoryListNode>
         @inject(ApplicationShell) protected readonly shell: ApplicationShell,
         @inject(FileSystem) protected readonly fileSystem: FileSystem,
         @inject(Git) protected readonly git: Git,
-        @inject(GitAvatarService) protected readonly avatarService: GitAvatarService,
+        @inject(ScmAvatarService) protected readonly avatarService: ScmAvatarService,
         @inject(WidgetManager) protected readonly widgetManager: WidgetManager,
         @inject(GitDiffContribution) protected readonly diffContribution: GitDiffContribution) {
         super();
@@ -187,7 +187,7 @@ export class GitHistoryWidget extends GitNavigableListWidget<GitHistoryListNode>
         if (commit.expanded) {
             this.removeFileChangeNodes(commit, id);
         } else {
-            this.addFileChangeNodes(commit, id);
+            await this.addFileChangeNodes(commit, id);
         }
         commit.expanded = !commit.expanded;
         this.update();
@@ -272,12 +272,13 @@ export class GitHistoryWidget extends GitNavigableListWidget<GitHistoryListNode>
     protected renderHistoryHeader(): React.ReactNode {
         if (this.options.uri) {
             const path = this.relativePath(this.options.uri);
+            const fileName = path.split('/').pop();
             return <div className='diff-header'>
                 {
                     this.renderHeaderRow({ name: 'repository', value: this.getRepositoryLabel(this.options.uri) })
                 }
                 {
-                    this.renderHeaderRow({ name: 'path', value: path })
+                    this.renderHeaderRow({ name: 'file', value: fileName, title: path })
                 }
                 <div className='theia-header'>
                     Commits
@@ -341,7 +342,6 @@ export class GitHistoryWidget extends GitNavigableListWidget<GitHistoryListNode>
                 e => {
                     if (commit.selected && !this.singleFileMode) {
                         this.addOrRemoveFileChangeNodes(commit);
-                        this.update();
                     } else {
                         this.selectNode(commit);
                     }
@@ -502,10 +502,6 @@ export namespace GitHistoryList {
 export class GitHistoryList extends React.Component<GitHistoryList.Props> {
     list: List | undefined;
 
-    protected commitHeight: number = 50;
-    protected fileChangeHeight: number = 21;
-    protected lastFileChangeHeight: number = 31;
-
     protected readonly checkIfRowIsLoaded = (opts: { index: number }) => this.doCheckIfRowIsLoaded(opts);
     protected doCheckIfRowIsLoaded(opts: { index: number }) {
         const row = this.props.rows[opts.index];
@@ -532,8 +528,8 @@ export class GitHistoryList extends React.Component<GitHistoryList.Props> {
                                 width={width}
                                 height={height}
                                 onRowsRendered={onRowsRendered}
-                                rowRenderer={this.renderRow}
-                                rowHeight={this.calcRowHeight}
+                                rowRenderer={this.measureRowRenderer}
+                                rowHeight={this.measureCache.rowHeight}
                                 rowCount={this.props.hasMoreRows ? this.props.rows.length + 1 : this.props.rows.length}
                                 tabIndex={-1}
                                 onScroll={this.props.handleScroll}
@@ -550,10 +546,25 @@ export class GitHistoryList extends React.Component<GitHistoryList.Props> {
         </InfiniteLoader>;
     }
 
-    componentDidUpdate(): void {
-        if (this.list) {
-            this.list.recomputeRowHeights(this.props.indexOfSelected);
-        }
+    componentWillUpdate(): void {
+        this.measureCache.clearAll();
+    }
+
+    protected measureCache = new CellMeasurerCache();
+
+    protected measureRowRenderer: ListRowRenderer = (params: ListRowProps) => {
+        const { index, key, parent } = params;
+        return (
+            <CellMeasurer
+                cache={this.measureCache}
+                columnIndex={0}
+                key={key}
+                rowIndex={index}
+                parent={parent}
+            >
+                {() => this.renderRow(params)}
+            </CellMeasurer>
+        );
     }
 
     protected renderRow: ListRowRenderer = ({ index, key, style }) => {
@@ -574,14 +585,5 @@ export class GitHistoryList extends React.Component<GitHistoryList.Props> {
                 <span className='fa fa-spinner fa-pulse fa-fw'></span>
             </div>;
         }
-    }
-
-    protected readonly calcRowHeight = (options: ListRowProps) => {
-        const row = this.props.rows[options.index];
-        if (GitFileChangeNode.is(row)) {
-            const nextIsCommit = GitCommitNode.is(this.props.rows[options.index + 1]);
-            return nextIsCommit ? this.lastFileChangeHeight : this.fileChangeHeight;
-        }
-        return this.commitHeight;
     }
 }

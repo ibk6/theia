@@ -1,8 +1,9 @@
+> [Register Now!](https://theiadevcon.org#register) for TheiaDevCon June 2019 in Stockholm, Sweden ([learn more](https://theiadevcon.org))
 
 <br/>
 <div id="theia-logo" align="center">
     <br />
-    <img src="./logo/theia-logo.svg" alt="Theia Logo" width="300"/>
+    <img src="https://raw.githubusercontent.com/theia-ide/theia/master/logo/theia-logo.svg?sanitize=true" alt="Theia Logo" width="300"/>
     <h3>Cloud & Desktop IDE Platform</h3>
 </div>
 
@@ -52,6 +53,7 @@ Here you can find guides and examples for common scenarios:
 - [Develop a Theia application - your own IDE](https://www.theia-ide.org/doc/Composing_Applications.html)
 - [Develop a Theia plugin - a VS Code like extension](https://www.theia-ide.org/doc/Authoring_Plugins.html)
 - [Develop a Theia extension](http://www.theia-ide.org/doc/Authoring_Extensions.html)
+- [Test a VS Code extension in Theia](https://github.com/theia-ide/theia/wiki/Testing-VS-Code-extensions)
 - [Package a desktop Theia application with Electron](https://github.com/theia-ide/yangster-electron)
 
 ## Contributing

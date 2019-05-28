@@ -208,7 +208,8 @@ export class FileSystemNode implements FileSystem {
             return new Promise<FileStat>((resolve, reject) => {
                 mv(FileUri.fsPath(_sourceUri), FileUri.fsPath(_targetUri), { mkdirp: true, clobber: overwrite }, async error => {
                     if (error) {
-                        return reject(error);
+                        reject(error);
+                        return;
                     }
                     resolve(await this.doGetStat(_targetUri, 1));
                 });
@@ -230,6 +231,9 @@ export class FileSystemNode implements FileSystem {
         }
         if (targetStat && !overwrite) {
             throw FileSystemError.FileExists(targetUri, "Did you set the 'overwrite' flag to true?");
+        }
+        if (targetStat && targetStat.uri === sourceStat.uri) {
+            throw FileSystemError.FileExists(targetUri, 'Cannot perform copy, source and destination are the same.');
         }
         await fs.copy(FileUri.fsPath(_sourceUri), FileUri.fsPath(_targetUri), { overwrite, recursive });
         const newStat = await this.doGetStat(_targetUri, 1);
@@ -286,7 +290,8 @@ export class FileSystemNode implements FileSystem {
                 // tslint:disable-next-line:no-any
                 touch(FileUri.fsPath(_uri), async (error: any) => {
                     if (error) {
-                        return reject(error);
+                        reject(error);
+                        return;
                     }
                     resolve(await this.doGetStat(_uri, 1));
                 });
@@ -313,7 +318,8 @@ export class FileSystemNode implements FileSystem {
                 await new Promise<void>((resolve, reject) => {
                     fs.rename(filePath, outputRootPath, async error => {
                         if (error) {
-                            return reject(error);
+                            reject(error);
+                            return;
                         }
                         resolve();
                     });

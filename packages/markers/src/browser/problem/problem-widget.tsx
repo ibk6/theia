@@ -23,6 +23,8 @@ import { TreeWidget, TreeProps, ContextMenuRenderer, TreeNode, NodeProps, TreeMo
 import { DiagnosticSeverity } from 'vscode-languageserver-types';
 import * as React from 'react';
 
+export const PROBLEMS_WIDGET_ID = 'problems';
+
 @injectable()
 export class ProblemWidget extends TreeWidget {
 
@@ -34,7 +36,7 @@ export class ProblemWidget extends TreeWidget {
     ) {
         super(treeProps, model, contextMenuRenderer);
 
-        this.id = 'problems';
+        this.id = PROBLEMS_WIDGET_ID;
         this.title.label = 'Problems';
         this.title.caption = 'Problems';
         this.title.iconClass = 'fa problem-tab-icon';
@@ -55,12 +57,13 @@ export class ProblemWidget extends TreeWidget {
         // no-op
     }
     protected superRestoreState(state: object): void {
-        return super.restoreState(state);
+        super.restoreState(state);
+        return;
     }
 
     protected handleCopy(event: ClipboardEvent) {
         const uris = this.model.selectedNodes.filter(MarkerNode.is).map(node => node.uri.toString());
-        if (uris.length > 0) {
+        if (uris.length > 0 && event.clipboardData) {
             event.clipboardData.setData('text/plain', uris.join('\n'));
             event.preventDefault();
         }

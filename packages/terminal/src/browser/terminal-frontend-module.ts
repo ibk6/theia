@@ -16,6 +16,7 @@
 
 import { ContainerModule, Container } from 'inversify';
 import { CommandContribution, MenuContribution } from '@theia/core/lib/common';
+import { bindContributionProvider } from '@theia/core';
 import { KeybindingContribution, WebSocketConnectionProvider, WidgetFactory, KeybindingContext } from '@theia/core/lib/browser';
 import { TabBarToolbarContribution } from '@theia/core/lib/browser/shell/tab-bar-toolbar';
 import { TerminalFrontendContribution } from './terminal-frontend-contribution';
@@ -28,6 +29,10 @@ import { TerminalActiveContext } from './terminal-keybinding-contexts';
 import { createCommonBindings } from '../common/terminal-common-module';
 import { TerminalService } from './base/terminal-service';
 import { bindTerminalPreferences } from './terminal-preferences';
+import { URLMatcher, LocalhostMatcher } from './terminal-linkmatcher';
+import { TerminalContribution } from './terminal-contribution';
+import { TerminalLinkmatcherFiles } from './terminal-linkmatcher-files';
+import { TerminalLinkmatcherDiffPre, TerminalLinkmatcherDiffPost } from './terminal-linkmatcher-diff';
 
 import '../../src/browser/terminal.css';
 import 'xterm/lib/xterm.css';
@@ -80,4 +85,22 @@ export default new ContainerModule(bind => {
     bind(IShellTerminalServer).toService(ShellTerminalServerProxy);
 
     createCommonBindings(bind);
+
+    // link matchers
+    bindContributionProvider(bind, TerminalContribution);
+
+    bind(URLMatcher).toSelf().inSingletonScope();
+    bind(TerminalContribution).toService(URLMatcher);
+
+    bind(LocalhostMatcher).toSelf().inSingletonScope();
+    bind(TerminalContribution).toService(LocalhostMatcher);
+
+    bind(TerminalLinkmatcherFiles).toSelf().inSingletonScope();
+    bind(TerminalContribution).toService(TerminalLinkmatcherFiles);
+
+    bind(TerminalLinkmatcherDiffPre).toSelf().inSingletonScope();
+    bind(TerminalContribution).toService(TerminalLinkmatcherDiffPre);
+
+    bind(TerminalLinkmatcherDiffPost).toSelf().inSingletonScope();
+    bind(TerminalContribution).toService(TerminalLinkmatcherDiffPost);
 });

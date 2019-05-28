@@ -1,6 +1,6 @@
 sudo: required
 language: node_js
-node_js: '8'
+node_js: '10'
 git:
   depth: 1
 cache:
@@ -11,6 +11,7 @@ cache:
 # start_cache_directories
   - dev-packages/application-manager/node_modules
   - dev-packages/application-package/node_modules
+  - dev-packages/electron/node_modules
   - examples/browser/node_modules
   - examples/electron/node_modules
   - node_modules
@@ -50,6 +51,7 @@ cache:
   - packages/preview/node_modules
   - packages/process/node_modules
   - packages/python/node_modules
+  - packages/scm/node_modules
   - packages/search-in-workspace/node_modules
   - packages/task/node_modules
   - packages/terminal/node_modules
@@ -72,24 +74,35 @@ env:
     - NODE_OPTIONS="--max_old_space_size=4096"
 addons:
   apt:
+    update: true
     sources:
     - ubuntu-toolchain-r-test
     packages:
     - g++-4.8
     - oracle-java9-set-default
     - libsecret-1-dev
+    - xvfb
+    - libx11-dev
+    - libxkbfile-dev
     chrome: stable
-before_script:
-  - export DISPLAY=:99.0; sh -e /etc/init.d/xvfb start ;
-  - google-chrome-stable --headless --disable-gpu --remote-debugging-port=9222 http://localhost \&  ;
 before_install:
+  - |
+    if [ "$TRAVIS_OS_NAME" == "linux" ]; then
+      export DISPLAY=:99.0
+      Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 &
+      echo "XVFB configured"
+    fi
   - curl -o- -L https://yarnpkg.com/install.sh | bash -s -- --version 1.13.0
-  - export PATH=$HOME/.yarn/bin:$PATH ;
-install: yarn && scripts/check_git_status.sh
+  - export PATH=$HOME/.yarn/bin:$PATH
+install:
+  - THEIA_SKIP_NPM_PREPARE=1 yarn install
+  - travis_retry npx electron-h264-test
+  - yarn prepare
+  - scripts/check_git_status.sh
 script:
-  - travis_retry yarn test:theia ;
-  - travis_retry yarn test:electron ;
-  - travis_retry yarn test:browser ;
+  - travis_retry yarn test:theia
+  - travis_retry yarn test:electron
+  - travis_retry yarn test:browser
 notifications:
   webhooks:
     urls:
@@ -108,7 +121,7 @@ jobs:
     env: CXX=c++
     before_script: skip
     script:
-      - travis_retry yarn test:theia ;
+      - travis_retry yarn test:theia
   - stage: deploy
     if: NOT type IN (cron, pull_request)
     os: linux
@@ -118,9 +131,16 @@ jobs:
     before_deploy:
       - printf "//registry.npmjs.org/:_authToken=${NPM_AUTH_TOKEN}\n" >> ~/.npmrc
       - yarn
+      - yarn run docs
     deploy:
-      provider: script
-      script: yarn run publish:next
-      on:
-        branch: master
-      skip_cleanup: true
+      - provider: script
+        script: yarn run publish:next
+        on:
+          branch: master
+        skip_cleanup: true
+      - provider: pages
+        skip-cleanup: true
+        github-token: $GITHUB_TOKEN
+        local-dir: gh-pages
+        on:
+          branch: master

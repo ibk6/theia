@@ -68,6 +68,21 @@ export class TasksMainImpl implements TasksMain {
                 this.proxy.$onDidEndTask(event.taskId);
             }
         });
+
+        this.taskWatcher.onDidStartTaskProcess((event: TaskInfo) => {
+            if (event.ctx === this.workspaceRootUri && event.processId !== undefined) {
+                this.proxy.$onDidStartTaskProcess(event.processId, {
+                    id: event.taskId,
+                    task: event.config
+                });
+            }
+        });
+
+        this.taskWatcher.onDidEndTaskProcess((event: TaskExitedEvent) => {
+            if (event.ctx === this.workspaceRootUri && event.code !== undefined) {
+                this.proxy.$onDidEndTaskProcess(event.code, event.taskId);
+            }
+        });
     }
 
     $registerTaskProvider(handle: number, type: string): void {
@@ -75,7 +90,7 @@ export class TasksMainImpl implements TasksMain {
         const taskResolver = this.createTaskResolver(handle);
 
         const disposable = new DisposableCollection();
-        disposable.push(this.taskProviderRegistry.register(type, taskProvider));
+        disposable.push(this.taskProviderRegistry.register(type, taskProvider, handle));
         disposable.push(this.taskResolverRegistry.register(type, taskResolver));
         this.disposables.set(handle, disposable);
     }

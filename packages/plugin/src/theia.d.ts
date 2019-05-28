@@ -157,7 +157,6 @@ declare module '@theia/plugin' {
         export let all: Plugin<any>[];
     }
 
-
     /**
  * A command is a unique identifier of a function
  * which can be executed by a user via a keyboard shortcut,
@@ -1854,6 +1853,96 @@ declare module '@theia/plugin' {
     }
 
     /**
+     * A light-weight user input UI that is initially not visible. After
+     * configuring it through its properties the extension can make it
+     * visible by calling [QuickInput.show](#QuickInput.show).
+     *
+     * There are several reasons why this UI might have to be hidden and
+     * the extension will be notified through [QuickInput.onDidHide](#QuickInput.onDidHide).
+     * (Examples include: an explicit call to [QuickInput.hide](#QuickInput.hide),
+     * the user pressing Esc, some other input UI opening, etc.)
+     *
+     * A user pressing Enter or some other gesture implying acceptance
+     * of the current state does not automatically hide this UI component.
+     * It is up to the extension to decide whether to accept the user's input
+     * and if the UI should indeed be hidden through a call to [QuickInput.hide](#QuickInput.hide).
+     *
+     * When the extension no longer needs this input UI, it should
+     * [QuickInput.dispose](#QuickInput.dispose) it to allow for freeing up
+     * any resources associated with it.
+     *
+     * See [QuickPick](#QuickPick) and [InputBox](#InputBox) for concrete UIs.
+     */
+    export interface QuickInput {
+
+        /**
+         * An optional title.
+         */
+        title: string | undefined;
+
+        /**
+         * An optional current step count.
+         */
+        step: number | undefined;
+
+        /**
+         * An optional total step count.
+         */
+        totalSteps: number | undefined;
+
+        /**
+         * If the UI should allow for user input. Defaults to true.
+         *
+         * Change this to false, e.g., while validating user input or
+         * loading data for the next step in user input.
+         */
+        enabled: boolean;
+
+        /**
+         * If the UI should show a progress indicator. Defaults to false.
+         *
+         * Change this to true, e.g., while loading more data or validating
+         * user input.
+         */
+        busy: boolean;
+
+        /**
+         * If the UI should stay open even when loosing UI focus. Defaults to false.
+         */
+        ignoreFocusOut: boolean;
+
+        /**
+         * Makes the input UI visible in its current configuration. Any other input
+         * UI will first fire an [QuickInput.onDidHide](#QuickInput.onDidHide) event.
+         */
+        show(): void;
+
+        /**
+         * Hides this input UI. This will also fire an [QuickInput.onDidHide](#QuickInput.onDidHide)
+         * event.
+         */
+        hide(): void;
+
+        /**
+         * An event signaling when this input UI is hidden.
+         *
+         * There are several reasons why this UI might have to be hidden and
+         * the extension will be notified through [QuickInput.onDidHide](#QuickInput.onDidHide).
+         * (Examples include: an explicit call to [QuickInput.hide](#QuickInput.hide),
+         * the user pressing Esc, some other input UI opening, etc.)
+         */
+        onDidHide: Event<void>;
+
+        /**
+         * Dispose of this input UI and any associated resources. If it is still
+         * visible, it is first hidden. After this call the input UI is no longer
+         * functional and no additional methods or properties on it should be
+         * accessed. Instead a new input UI should be created.
+         */
+        dispose(): void;
+    }
+
+    /**
      * Something that can be selected from a list of items.
      */
     export interface QuickPickItem {
@@ -1878,6 +1967,105 @@ declare module '@theia/plugin' {
          * not implemented yet
          */
         picked?: boolean;
+    }
+
+    /**
+     * Button for an action in a [QuickPick](#QuickPick) or [InputBox](#InputBox).
+     */
+    export interface QuickInputButton {
+
+        /**
+         * Icon for the button.
+         */
+        readonly iconPath: Uri | { light: Uri; dark: Uri } | ThemeIcon;
+
+        /**
+         * An optional tooltip.
+         */
+        readonly tooltip?: string | undefined;
+    }
+
+    /**
+     * A concrete [QuickInput](#QuickInput) to let the user pick an item from a
+     * list of items of type T. The items can be filtered through a filter text field and
+     * there is an option [canSelectMany](#QuickPick.canSelectMany) to allow for
+     * selecting multiple items.
+     *
+     * Note that in many cases the more convenient [window.showQuickPick](#window.showQuickPick)
+     * is easier to use. [window.createQuickPick](#window.createQuickPick) should be used
+     * when [window.showQuickPick](#window.showQuickPick) does not offer the required flexibility.
+     */
+    export interface QuickPick<T extends QuickPickItem> extends QuickInput {
+
+        /**
+         * Current value of the filter text.
+         */
+        value: string;
+
+        /**
+         * Optional placeholder in the filter text.
+         */
+        placeholder: string | undefined;
+
+        /**
+         * An event signaling when the value of the filter text has changed.
+         */
+        readonly onDidChangeValue: Event<string>;
+
+        /**
+         * An event signaling when the user indicated acceptance of the selected item(s).
+         */
+        readonly onDidAccept: Event<void>;
+
+        /**
+         * Buttons for actions in the UI.
+         */
+        buttons: ReadonlyArray<QuickInputButton>;
+
+        /**
+         * An event signaling when a button was triggered.
+         */
+        readonly onDidTriggerButton: Event<QuickInputButton>;
+
+        /**
+         * Items to pick from.
+         */
+        items: ReadonlyArray<T>;
+
+        /**
+         * If multiple items can be selected at the same time. Defaults to false.
+         */
+        canSelectMany: boolean;
+
+        /**
+         * If the filter text should also be matched against the description of the items. Defaults to false.
+         */
+        matchOnDescription: boolean;
+
+        /**
+         * If the filter text should also be matched against the detail of the items. Defaults to false.
+         */
+        matchOnDetail: boolean;
+
+        /**
+         * Active items. This can be read and updated by the extension.
+         */
+        activeItems: ReadonlyArray<T>;
+
+        /**
+         * An event signaling when the active items have changed.
+         */
+        readonly onDidChangeActive: Event<T[]>;
+
+        /**
+         * Selected items. This can be read and updated by the extension.
+         */
+        selectedItems: ReadonlyArray<T>;
+
+        /**
+         * An event signaling when the selected items have changed.
+         */
+        readonly onDidChangeSelection: Event<T[]>;
     }
 
     /**
@@ -2664,6 +2852,17 @@ declare module '@theia/plugin' {
         readonly onDidDispose: Event<void>;
 
         /**
+         * Show the webview panel in a given column.
+         *
+         * A webview panel may only show in a single column at a time. If it is already showing, this
+         * method moves it to a new column.
+         *
+         * @param viewColumn View column to show the panel in. Shows in the current `viewColumn` if undefined.
+         * @param preserveFocus When `true`, the webview will not take focus.
+         */
+        reveal(viewColumn?: ViewColumn, preserveFocus?: boolean): void;
+
+        /**
          * Show the webview panel according to a given options.
          *
          * A webview panel may only show in a single column at a time. If it is already showing, this
@@ -2739,6 +2938,21 @@ declare module '@theia/plugin' {
          * @return PromiseLike indicating that the webview has been fully restored.
          */
         deserializeWebviewPanel(webviewPanel: WebviewPanel, state: any): PromiseLike<void>;
+    }
+
+    /**
+     * A uri handler is responsible for handling system-wide [uris](#Uri).
+     *
+     * @see [window.registerUriHandler](#window.registerUriHandler).
+     */
+    export interface UriHandler {
+
+        /**
+         * Handle the provided system-wide [uri](#Uri).
+         *
+         * @see [window.registerUriHandler](#window.registerUriHandler).
+         */
+        handleUri(uri: Uri): ProviderResult<void>;
     }
 
     /**
@@ -2874,6 +3088,18 @@ declare module '@theia/plugin' {
             options: QuickPickOptions & { canPickMany: true },
             token?: CancellationToken
         ): PromiseLike<T[] | undefined>;
+
+        /**
+         * Creates a [QuickPick](#QuickPick) to let the user pick an item from a list
+         * of items of type T.
+         *
+         * Note that in many cases the more convenient [window.showQuickPick](#window.showQuickPick)
+         * is easier to use. [window.createQuickPick](#window.createQuickPick) should be used
+         * when [window.showQuickPick](#window.showQuickPick) does not offer the required flexibility.
+         *
+         * @return A new [QuickPick](#QuickPick).
+         */
+        export function createQuickPick<T extends QuickPickItem>(): QuickPick<T>;
 
         /**
          * Shows a selection list of [workspace folders](#workspace.workspaceFolders) to pick from.
@@ -3160,6 +3386,29 @@ declare module '@theia/plugin' {
          * @returns a [TreeView](#TreeView).
          */
         export function createTreeView<T>(viewId: string, options: TreeViewOptions<T>): TreeView<T>;
+
+        /**
+         * Registers a [uri handler](#UriHandler) capable of handling system-wide [uris](#Uri).
+         * In case there are multiple windows open, the topmost window will handle the uri.
+         * A uri handler is scoped to the extension it is contributed from; it will only
+         * be able to handle uris which are directed to the extension itself. A uri must respect
+         * the following rules:
+         *
+         * - The uri-scheme must be the product name;
+         * - The uri-authority must be the extension id (eg. `my.extension`);
+         * - The uri-path, -query and -fragment parts are arbitrary.
+         *
+         * For example, if the `my.extension` extension registers a uri handler, it will only
+         * be allowed to handle uris with the prefix `product-name://my.extension`.
+         *
+         * An extension can only register a single uri handler in its entire activation lifetime.
+         *
+         * * *Note:* There is an activation event `onUri` that fires when a uri directed for
+         * the current extension is about to be handled.
+         *
+         * @param handler The uri handler to register for this extension.
+         */
+        export function registerUriHandler(handler: UriHandler): Disposable;
 
         /**
          * Show progress in the editor. Progress is shown while running the given callback
@@ -3661,7 +3910,7 @@ declare module '@theia/plugin' {
         size: number;
     }
 
-	/**
+    /**
 	 * A type that filesystem providers should use to signal errors.
 	 *
 	 * This class has factory methods for common error-cases, like `EntryNotFound` when
@@ -3669,45 +3918,45 @@ declare module '@theia/plugin' {
 	 */
     export class FileSystemError extends Error {
 
-		/**
+        /**
          * Create an error to signal that a file or folder wasn't found.
          * @param messageOrUri Message or uri.
          */
         static FileNotFound(messageOrUri?: string | Uri): FileSystemError;
 
-		/**
+        /**
          * Create an error to signal that a file or folder already exists, e.g. when
          * creating but not overwriting a file.
          * @param messageOrUri Message or uri.
          */
         static FileExists(messageOrUri?: string | Uri): FileSystemError;
 
-		/**
+        /**
          * Create an error to signal that a file is not a folder.
          * @param messageOrUri Message or uri.
          */
         static FileNotADirectory(messageOrUri?: string | Uri): FileSystemError;
 
-		/**
+        /**
          * Create an error to signal that a file is a folder.
          * @param messageOrUri Message or uri.
          */
         static FileIsADirectory(messageOrUri?: string | Uri): FileSystemError;
 
-		/**
+        /**
          * Create an error to signal that an operation lacks required permissions.
          * @param messageOrUri Message or uri.
          */
         static NoPermissions(messageOrUri?: string | Uri): FileSystemError;
 
-		/**
+        /**
          * Create an error to signal that the file system is unavailable or too busy to
          * complete a request.
          * @param messageOrUri Message or uri.
          */
         static Unavailable(messageOrUri?: string | Uri): FileSystemError;
 
-		/**
+        /**
          * Creates a new filesystem error.
          *
          * @param messageOrUri Message or uri.
@@ -4110,7 +4359,6 @@ declare module '@theia/plugin' {
          */
         export function applyEdit(edit: WorkspaceEdit): PromiseLike<boolean>;
 
-
         /**
          * Register a filesystem provider for a given scheme, e.g. `ftp`.
          *
@@ -4223,6 +4471,38 @@ declare module '@theia/plugin' {
          * Returns all query parameters of current IDE.
          */
         export function getQueryParameters(): { [key: string]: string | string[] } | undefined;
+
+		/**
+		 * The application name of the editor, like 'Eclipse Theia'.
+		 */
+        export const appName: string;
+
+		/**
+		 * The application root folder from which the editor is running.
+		 */
+        export const appRoot: string;
+
+		/**
+		 * The custom uri scheme the editor registers to in the operating system.
+		 */
+        export const uriScheme: string;
+
+		/**
+		 * Represents the preferred user-language, like `de-CH`, `fr`, or `en-US`.
+		 */
+        export const language: string;
+
+		/**
+		 * A unique identifier for the computer.
+		 */
+        export const machineId: string;
+
+		/**
+		 * A unique identifier for the current session.
+		 * Changes each time the editor is started.
+		 */
+        export const sessionId: string;
+
     }
 
     /**
@@ -5049,7 +5329,6 @@ declare module '@theia/plugin' {
         constructor(range: Range, newText: string);
     }
 
-
     /**
      * Completion item kinds.
      */
@@ -5181,6 +5460,18 @@ declare module '@theia/plugin' {
          * [additionalTextEdits](#additionalTextEdits)-property.
          */
         command?: Command;
+
+        /**
+         * @deprecated Use `CompletionItem.insertText` and `CompletionItem.range` instead.
+         *
+         * ~~An [edit](#TextEdit) which is applied to a document when selecting
+         * this completion. When an edit is provided the value of
+         * [insertText](#CompletionItem.insertText) is ignored.~~
+         *
+         * ~~The [range](#Range) of the edit must be single-line and on the same
+         * line completions were [requested](#CompletionItemProvider.provideCompletionItems) at.~~
+         */
+        textEdit?: TextEdit;
 
         /**
          * Creates a new completion item.
@@ -5759,6 +6050,15 @@ declare module '@theia/plugin' {
          * @param other Kind to check.
          */
         contains(other: CodeActionKind): boolean;
+
+        /**
+         * Check if this code action kind intersects `other`.
+         * The kind "refactor.extract" for example intersects refactor, "refactor.extract" and
+         * `"refactor.extract.function", but not "unicorn.refactor.extract", or "refactor.extractAll".
+         *
+         * @param other Kind to check.
+         */
+        intersects(other: CodeActionKind): boolean;
     }
 
     /**
@@ -6029,7 +6329,6 @@ declare module '@theia/plugin' {
          */
         resolveDocumentLink?(link: DocumentLink, token: CancellationToken | undefined): ProviderResult<DocumentLink>;
     }
-
 
     /**
     * The rename provider interface defines the contract between extensions and
@@ -6527,6 +6826,235 @@ declare module '@theia/plugin' {
          * signaled by returning `undefined`, `null`, or an empty array.
          */
         provideDocumentHighlights(document: TextDocument, position: Position, token: CancellationToken | undefined): ProviderResult<DocumentHighlight[]>;
+    }
+
+    /**
+     * Represents the input box in the Source Control viewlet.
+     */
+    export interface SourceControlInputBox {
+
+        /**
+         * Setter and getter for the contents of the input box.
+         */
+        value: string;
+
+        /**
+         * A string to show as place holder in the input box to guide the user.
+         */
+        placeholder: string;
+    }
+
+    interface QuickDiffProvider {
+
+        /**
+         * Provide a [uri](#Uri) to the original resource of any given resource uri.
+         *
+         * @param uri The uri of the resource open in a text editor.
+         * @param token A cancellation token.
+         * @return A thenable that resolves to uri of the matching original resource.
+         */
+        provideOriginalResource?(uri: Uri, token: CancellationToken): ProviderResult<Uri>;
+    }
+
+    /**
+     * The theme-aware decorations for a
+     * [source control resource state](#SourceControlResourceState).
+     */
+    export interface SourceControlResourceThemableDecorations {
+
+        /**
+         * The icon path for a specific
+         * [source control resource state](#SourceControlResourceState).
+         */
+        readonly iconPath?: string | Uri;
+    }
+
+    /**
+     * The decorations for a [source control resource state](#SourceControlResourceState).
+     * Can be independently specified for light and dark themes.
+     */
+    export interface SourceControlResourceDecorations extends SourceControlResourceThemableDecorations {
+
+        /**
+         * Whether the [source control resource state](#SourceControlResourceState) should
+         * be striked-through in the UI.
+         */
+        readonly strikeThrough?: boolean;
+
+        /**
+         * Whether the [source control resource state](#SourceControlResourceState) should
+         * be faded in the UI.
+         */
+        readonly faded?: boolean;
+
+        /**
+         * The title for a specific
+         * [source control resource state](#SourceControlResourceState).
+         */
+        readonly tooltip?: string;
+
+        /**
+         * The light theme decorations.
+         */
+        readonly light?: SourceControlResourceThemableDecorations;
+
+        /**
+         * The dark theme decorations.
+         */
+        readonly dark?: SourceControlResourceThemableDecorations;
+    }
+
+    /**
+     * An source control resource state represents the state of an underlying workspace
+     * resource within a certain [source control group](#SourceControlResourceGroup).
+     */
+    export interface SourceControlResourceState {
+
+        /**
+         * The [uri](#Uri) of the underlying resource inside the workspace.
+         */
+        readonly resourceUri: Uri;
+
+        /**
+         * The [command](#Command) which should be run when the resource
+         * state is open in the Source Control viewlet.
+         */
+        readonly command?: Command;
+
+        /**
+         * The [decorations](#SourceControlResourceDecorations) for this source control
+         * resource state.
+         */
+        readonly decorations?: SourceControlResourceDecorations;
+    }
+
+    /**
+     * A source control resource group is a collection of
+     * [source control resource states](#SourceControlResourceState).
+     */
+    export interface SourceControlResourceGroup {
+
+        /**
+         * The id of this source control resource group.
+         */
+        readonly id: string;
+
+        /**
+         * The label of this source control resource group.
+         */
+        label: string;
+
+        /**
+         * Whether this source control resource group is hidden when it contains
+         * no [source control resource states](#SourceControlResourceState).
+         */
+        hideWhenEmpty?: boolean;
+
+        /**
+         * This group's collection of
+         * [source control resource states](#SourceControlResourceState).
+         */
+        resourceStates: SourceControlResourceState[];
+
+        /**
+         * Dispose this source control resource group.
+         */
+        dispose(): void;
+    }
+
+    /**
+     * An source control is able to provide [resource states](#SourceControlResourceState)
+     * to the editor and interact with the editor in several source control related ways.
+     */
+    export interface SourceControl {
+
+        /**
+         * The id of this source control.
+         */
+        readonly id: string;
+
+        /**
+         * The human-readable label of this source control.
+         */
+        readonly label: string;
+
+        /**
+         * The (optional) Uri of the root of this source control.
+         */
+        readonly rootUri: Uri | undefined;
+
+        /**
+         * The [input box](#SourceControlInputBox) for this source control.
+         */
+        readonly inputBox: SourceControlInputBox;
+
+        /**
+         * The UI-visible count of [resource states](#SourceControlResourceState) of
+         * this source control.
+         *
+         * Equals to the total number of [resource state](#SourceControlResourceState)
+         * of this source control, if undefined.
+         */
+        count?: number;
+
+        /**
+         * An optional [quick diff provider](#QuickDiffProvider).
+         */
+        quickDiffProvider?: QuickDiffProvider;
+
+        /**
+         * Optional commit template string.
+         *
+         * The Source Control viewlet will populate the Source Control
+         * input with this value when appropriate.
+         */
+        commitTemplate?: string;
+
+        /**
+         * Optional accept input command.
+         *
+         * This command will be invoked when the user accepts the value
+         * in the Source Control input.
+         */
+        acceptInputCommand?: Command;
+
+        /**
+         * Optional status bar commands.
+         *
+         * These commands will be displayed in the editor's status bar.
+         */
+        statusBarCommands?: Command[];
+
+        /**
+         * Create a new [resource group](#SourceControlResourceGroup).
+         */
+        createResourceGroup(id: string, label: string): SourceControlResourceGroup;
+
+        /**
+         * Dispose this source control.
+         */
+        dispose(): void;
+    }
+
+    export namespace scm {
+
+        /**
+         * ~~The [input box](#SourceControlInputBox) for the last source control
+         * created by the extension.~~
+         *
+         * @deprecated Use SourceControl.inputBox instead
+         */
+        export const inputBox: SourceControlInputBox;
+
+        /**
+         * Creates a new [source control](#SourceControl) instance.
+         *
+         * @param id An `id` for the source control. Something short, eg: `git`.
+         * @param label A human-readable string for the source control. Eg: `Git`.
+         * @param rootUri An optional Uri of the root of the source control. Eg: `Uri.parse(workspaceRoot)`.
+         * @return An instance of [source control](#SourceControl).
+         */
+        export function createSourceControl(id: string, label: string, rootUri?: Uri): SourceControl;
     }
 
     /**
@@ -7140,10 +7668,31 @@ declare module '@theia/plugin' {
          *  or '$eslint'. Problem matchers can be contributed by an extension using
          *  the `problemMatchers` extension point.
          */
-        constructor(taskDefinition: TaskDefinition,
+        constructor(
+            taskDefinition: TaskDefinition,
             scope: WorkspaceFolder | TaskScope.Global | TaskScope.Workspace,
             name: string,
             source?: string,
+            execution?: ProcessExecution | ShellExecution,
+            problemMatchers?: string | string[]);
+
+        /**
+         * ~~Creates a new task.~~
+         *
+         * @deprecated Use the new constructors that allow specifying a scope for the task.
+         *
+         * @param definition The task definition as defined in the taskDefinitions extension point.
+         * @param name The task's name. Is presented in the user interface.
+         * @param source The task's source (e.g. 'gulp', 'npm', ...). Is presented in the user interface.
+         * @param execution The process or shell execution.
+         * @param problemMatchers the names of problem matchers to use, like '$tsc'
+         *  or '$eslint'. Problem matchers can be contributed by an extension using
+         *  the `problemMatchers` extension point.
+         */
+        constructor(
+            taskDefinition: TaskDefinition,
+            name: string,
+            source: string,
             execution?: ProcessExecution | ShellExecution,
             problemMatchers?: string | string[]);
 
@@ -7249,6 +7798,39 @@ declare module '@theia/plugin' {
         execution: TaskExecution;
     }
 
+    /**
+     * An event signaling the start of a process execution
+     * triggered through a task
+     */
+    export interface TaskProcessStartEvent {
+        /**
+         * The task execution for which the process got started.
+         */
+        execution: TaskExecution;
+
+        /**
+         * The underlying process id.
+         */
+        processId: number;
+    }
+
+    /**
+     * An event signaling the end of a process execution
+     * triggered through a task
+     */
+    export interface TaskProcessEndEvent {
+
+        /**
+         * The task execution for which the process got started.
+         */
+        execution: TaskExecution;
+
+        /**
+         * The process's exit code.
+         */
+        exitCode: number;
+    }
+
     export namespace tasks {
 
         /**
@@ -7270,6 +7852,20 @@ declare module '@theia/plugin' {
 
         /** Fires when a task ends. */
         export const onDidEndTask: Event<TaskEndEvent>;
+
+        /**
+         * Fires when the underlying process has been started.
+         * This event will not fire for tasks that don't
+         * execute an underlying process.
+         */
+        export const onDidStartTaskProcess: Event<TaskProcessStartEvent>;
+
+        /**
+         * Fires when the underlying process has ended.
+         * This event will not fire for tasks that don't
+         * execute an underlying process.
+         */
+        export const onDidEndTaskProcess: Event<TaskProcessEndEvent>;
     }
 
     /**
@@ -7279,11 +7875,11 @@ declare module '@theia/plugin' {
     export interface Memento {
 
         /**
-        * Return a value.
-        *
-        * @param key A string.
-        * @return The stored value or `undefined`.
-        */
+         * Return a value.
+         *
+         * @param key A string.
+         * @return The stored value or `undefined`.
+         */
         get<T>(key: string): T | undefined;
 
         /**

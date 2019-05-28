@@ -24,6 +24,7 @@ import { Message } from '@phosphor/messaging';
 import { ArrayExt } from '@phosphor/algorithm';
 import { ElementExt } from '@phosphor/domutils';
 import { TabBarToolbarRegistry, TabBarToolbar } from './tab-bar-toolbar';
+import { TheiaDockPanel, MAIN_AREA_ID, BOTTOM_AREA_ID } from './theia-dock-panel';
 
 /** The class name added to hidden content nodes, which are required to render vertical side bars. */
 const HIDDEN_CONTENT_CLASS = 'theia-TabBar-hidden-content';
@@ -70,6 +71,9 @@ export class TabBarRenderer extends TabBar.Renderer {
      */
     contextMenuPath?: MenuPath;
 
+    // TODO refactor shell, rendered should only receive props with event handlers
+    // events should be handled by clients, like ApplicationShell
+    // right now it is mess: (1) client logic belong to renderer, (2) cyclic dependencies between renderes and clients
     constructor(protected readonly contextMenuRenderer?: ContextMenuRenderer) {
         super();
     }
@@ -80,19 +84,25 @@ export class TabBarRenderer extends TabBar.Renderer {
      */
     renderTab(data: SideBarRenderData): VirtualElement {
         const title = data.title;
+        const id = this.createTabId(data.title);
         const key = this.createTabKey(data);
         const style = this.createTabStyle(data);
         const className = this.createTabClass(data);
         const dataset = this.createTabDataset(data);
         return h.li(
             {
-                key, className, title: title.caption, style, dataset,
-                oncontextmenu: event => this.handleContextMenuEvent(event, title)
+                key, className, id, title: title.caption, style, dataset,
+                oncontextmenu: this.handleContextMenuEvent,
+                ondblclick: this.handleDblClickEvent
             },
             this.renderIcon(data),
             this.renderLabel(data),
             this.renderCloseIcon(data)
         );
+    }
+
+    createTabId(title: Title<Widget>): string {
+        return 'shell-tab-' + title.owner.id;
     }
 
     /**
@@ -159,15 +169,18 @@ export class TabBarRenderer extends TabBar.Renderer {
         return h.div({ className, style }, data.title.iconLabel);
     }
 
-    protected handleContextMenuEvent(event: MouseEvent, title: Title<Widget>) {
-        if (this.contextMenuRenderer && this.contextMenuPath) {
+    protected handleContextMenuEvent = (event: MouseEvent) => {
+        if (this.contextMenuRenderer && this.contextMenuPath && event.currentTarget instanceof HTMLElement) {
             event.stopPropagation();
             event.preventDefault();
 
-            if (this.tabBar !== undefined) {
+            if (this.tabBar) {
+                const id = event.currentTarget.id;
+                // tslint:disable-next-line:no-null-keyword
+                const title = this.tabBar.titles.find(t => this.createTabId(t) === id) || null;
                 this.tabBar.currentTitle = title;
                 this.tabBar.activate();
-                if (title.owner !== null) {
+                if (title) {
                     title.owner.activate();
                 }
             }
@@ -175,6 +188,19 @@ export class TabBarRenderer extends TabBar.Renderer {
             this.contextMenuRenderer.render(this.contextMenuPath, event);
         }
     }
+
+    protected handleDblClickEvent = (event: MouseEvent) => {
+        if (this.tabBar && event.currentTarget instanceof HTMLElement) {
+            const id = event.currentTarget.id;
+            // tslint:disable-next-line:no-null-keyword
+            const title = this.tabBar.titles.find(t => this.createTabId(t) === id) || null;
+            const area = title && title.owner.parent;
+            if (area instanceof TheiaDockPanel && (area.id === BOTTOM_AREA_ID || area.id === MAIN_AREA_ID)) {
+                area.toggleMaximized();
+            }
+        }
+    }
+
 }
 
 /**
@@ -356,6 +382,14 @@ export class ToolbarAwareTabBar extends ScrollableTabBar {
         const widget = current && current.owner || undefined;
         const items = widget ? this.tabBarToolbarRegistry.visibleItems(widget) : [];
         this.toolbar.updateItems(items, widget);
+    }
+
+    handleEvent(event: Event): void {
+        if (this.toolbar && event instanceof MouseEvent && this.toolbar.shouldHandleMouseEvent(event)) {
+            // if the mouse event is over the toolbar part don't handle it.
+            return;
+        }
+        super.handleEvent(event);
     }
 
     /**

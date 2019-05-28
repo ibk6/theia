@@ -1,10 +1,152 @@
 # Change Log
 
+## v0.7.0
+
+- [core] added support for several international keyboard layouts
+- [core] implemented auto-detection of keyboard layout based on pressed keys
+- [core] added command to manually choose a keyboard layout
+
+Breaking changes:
+
+- [preferences] refactored to integrate launch configurations as preferences
+- [filesystem] extracted `FileUploadService` and refactored `FileTreeWidget` to use it [#5086](https://github.com/theia-ide/theia/pull/5086)
+  - moved `FileDownloadCommands.UPLOAD` to `FileSystemCommands.UPLOAD`
+- [scm] added Source Control Model
+- [git] bind Git UI to SCM  
+
+## v0.6.0
+
+- Allowed the creation of sub-files and/or sub-folders if name has `/`
+- [core] added `files.enableTrash` preference
+- [core] added support for custom React toolbar widgets
+- [core] added support for tail decorators
+- [core] aligned the statusbar styles with VSCode
+- [core] updated the prefix quick-open service to support `actionProviders`
+- [cpp] added support for block comment auto-closing pairs
+- [editor-preview] fixed error at application startup if no preview editors are opened
+- [editor-preview] fixed the `goToDefinition` failure when in editor preview mode
+- [electron] added the ability to run plugins by binding the components on the backend
+- [electron] added the configure Plug-ins option to the start script
+- [electron] updated Electron to include a `minWidth` and `minHeight`
+- [electron] upgraded version of Electron used to version 3
+- [filesystem] added the menu item `Upload Files...` to easily upload files into a workspace
+- [filesystem] implemented `Save As` including a save dialog, and new command
+- [filesystem] updated the handling when attempting to perform copying when the source and target are the same
+- [git] added ability to toggle `Git History` widget
+- [git] fixed `Discard All` alignment when the `Git` widget is too narrow
+- [git] fixed `Git History` widget alignment and behavior issues
+- [git] updated the ahead/behind icons on the statusbar
+- [keyboard] aligned the file and event naming conventions
+- [languages] updated error type for backwards compatibility
+- [plugin-ext] fixed the Plug-in path selection dialog for the hosted instance
+- [plugin] added `CodeActionKind` `intersects` Plug-in API
+- [plugin] added necessary Webview Plug-in APIs
+- [plugin] added propagation of `thisArg` on `registerCommand`
+- [plugin] added support for Gulp, Jake, Grunt Plug-in extensions
+- [plugin] added support for extensions without activation functions
+- [plugin] added the ability to choose through the CLI which VSCode API version to use
+- [plugin] aligned `window.setStatusBarMessage` with VSCode
+- [plugin] fixed `vscode.open` command by adding checks on arguments
+- [plugin] fixed implementation of `vscode.diff` command
+- [plugin] fixed issue where webviews were not focused or revealed properly
+- [plugin] fixed memory leak on Plug-ins reload
+- [plugin] fixed serialization of `Range` object
+- [plugin] fixed the registration of text decoration keys
+- [plugin] updated Plug-in language services to hook in monaco cancellation tokens
+- [preferences] added ability to override default application preference values
+- [search-in-workspace] added the ability to pass the currently selected editor text when searching
+- [security] fixed XSS vulnerability
+- [task] added command to clear task history
+- [task] added support to configure tasks
+- [task] added the ability to configure tasks
+- [task] added the ability to display recently used tasks
+- [task] updated the tasks quick-open menu including alignment, category labels and borders
+- [terminal] updated terminal preference's minimum value for `lineHeight` and `fontSize`
+- [textmate-grammars] added php grammar
+- [textmate-grammars] added rust grammar
+- [textmate-grammars] fixed incorrect jsx scope
+- [tree] added support for icons in node tail decorators
+- [workspace] allowed the creation of files and folders using recursive paths
+- [workspace] fixed incorrect file-icon when displaying recent workspaces
+
+Breaking changes:
+
+- [core] added support native keyboard layouts [#4724](https://github.com/theia-ide/theia/pull/4724)
+- [dialog] updated `validate` and `accept` methods so they are now Promisified [#4764](https://github.com/theia-ide/theia/pull/4764)
+- [editor] turned off autoSave by default to align with VSCode [#4777](https://github.com/theia-ide/theia/pull/4777)
+  - default settings can be overridden in application package.json:
+  ```json
+  {
+    "private": true,
+    "name": "myapp",
+    "theia": {
+      "frontend": {
+        "config": {
+          "preferences": {
+            "editor.autoSave": "on"
+          }
+        }
+      }
+    }
+  }
+  ```
+- [electron] removed cluster mode and startup timeout setting
+- [electron] updated Electron to make runtime dependencies optional [#4873](https://github.com/theia-ide/theia/pull/4873)
+- [extension-manager] deprecated [#4876](https://github.com/theia-ide/theia/pull/4876)
+- [node] moved to using Node.js version 10, dropping support for Node.js version 8
+
 ## v0.5.0
 
-- [cpp] added new clang-tidy and clang-tidy-checks preferences to lint cpp program when clangd v9+ is used.
+- Added `scope` to task configurations to differentiate 3 things: task type, task source, and where to run tasks
+- [core] added implementation for toolbar support for sidepanels and changed sidepanel tabs
+- [core] added new keybinding <kbd>alt</kbd>+<kbd>shift</kbd>+<kbd>w</kbd> to close all main area tabs
+- [core] added the ability to make sidebar widgets closable
+- [core] fixed `ToolbarAwareTabBar` detachment errors
+- [core] fixed broken wheel listener
+- [core] improved scrollbar styling
+- [core] updated tabbar toolbar to use VSCode icons
+- [core] updated the UI with numerous improvements including sidepanel icons, better alignment, tabbar and menu size
+- [cpp] added new `cpp.clangTidy `and `cpp.clangTidyChecks` preferences to lint cpp program when clangd v9+ is used
+- [cpp] fixed properly restarting clangd language server when changing cpp build configurations
+- [debug] added new debug preferences to control `view`, `console`, and `location` appearance
+- [editorconfig] added support to apply properties to monaco editor when opening/switching editors
+- [file-search] improved ordering and consistency of file search results
+- [filesystem] added `files.associations` property
+- [filesystem] improved the performance when deleting large directories
+- [filesystem] upgraded `nsfw` file-watching dependency from `vscode-nsfw` to `Axosoft/nsfw` which fixes memory leaks as well as fixes issues where files are not being properly watched outside the main watched directory
+- [git] fixed issue where Theia did not refresh the git view after deleting the only repository
+- [git] improved the git diff navigation header to be static
+- [java] improved handling of incomplete classpath commands
+- [keybindings] improved the keybindings widget search and table header to be static
+- [mini-browser] improved error handling of iframe errors
+- [navigator] added `Collapse All` toolbar item
+- [navigator] updated the navigator to handle multi-root workspaces better
+- [plugin-ext] added `workspace.onDidRenameFile ` Plug-in API
+- [plugin-ext] added `workspace.onWillRenameFile ` Plug-in API
+- [plugin-ext] added `workspace.registerFileSystemProvider` Plug-in API
+- [plugin-ext] added `workspace.saveAll` Plug-in API
+- [plugin-ext] added `workspace.updateWorkspaceFolders` Plug-in API
+- [plugin-ext] added ability to proceed `runInTerminal` requests in sidecar containers
+- [plugin-ext] added the ability to get selection context after executing a command
+- [plugin-ext] fixed VSCode Plug-in API incompatibilities for the `onDidChangeActiveTextEditor` event
+- [plugin-ext] fixed firing the `onWillSaveTextDocument` event
+- [plugin-ext] fixed issue of re-deploying already initialized plugins
 - [plugin] `workspace.openTextDocument` API now respects the contributed `FileSystemProviders`
-- [search-in-workspace] added a new preference `search.lineNumbers` to control whether to show line numbers for search results.
+- [plugin] added support for multiple windows per backend
+- [plugin] fixed progress creation
+- [plugin] improved the view container to use the native toolbar
+- [preferences] fixed content assist when editing `settings.json`
+- [preferences] fixed parsing of settings from workspace files
+- [preferences] improved overriding of default configurations
+- [preview] fixed issue when opening images
+- [search-in-workspace] added a new preference `search.lineNumbers` to control whether to show line numbers for search results
+- [task] added ability to `Run Selected Text`
+- [task] added new command to re-run the last task
+- [task] added schema support for `tasks.json`
+- [typehierarchy] added the new type hierarchy extension
+- [typehierarchy] improved `typehierarchy` to use all levels the language server sends if available
+- [workspace] added new `package.json` properties `newFIleName` and `newFileExtension` to specify default file name and extension when creating a new file
+- [workspace] improved performance of the file rename action for large directories
 
 Breaking changes:
 
